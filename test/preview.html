@@ -1,0 +1,190 @@
+<!doctype html>
+<!--
+  A standing-in-the-garden preview of the card without a Home Assistant.
+  Open it in a browser (or point Playwright at it) and you get the card, the
+  full layout and the popup against a fixed set of flights: one cruising
+  overhead, one climbing out of Schiphol that you can only hear, a helicopter
+  low to the east, and traffic on the taxiway that should be filtered out.
+
+      python3 -m http.server -d . 8080   ->   localhost:8080/test/preview.html
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Skywatch preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f2f4f7;
+        font-family: Roboto, system-ui, sans-serif;
+        color: #212121;
+        --primary-text-color: #212121;
+        --secondary-text-color: #6b7280;
+        --card-background-color: #fff;
+        --success-color: #2e7d32;
+        --warning-color: #b26a00;
+      }
+      .stack { max-width: 460px; margin: 0 auto; }
+      .stack > * { display: block; margin-bottom: 20px; }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #111418;
+          color: #e5e7eb;
+          --primary-text-color: #e5e7eb;
+          --secondary-text-color: #9aa4b2;
+          --card-background-color: #1c1f26;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stack">
+      <h2>compact</h2>
+      <skywatch-card id="compact"></skywatch-card>
+      <h2>full</h2>
+      <skywatch-card id="full"></skywatch-card>
+    </div>
+
+    <script type="module">
+      // Home Assistant's own card wrapper, reduced to the bit the card uses.
+      customElements.define(
+        "ha-card",
+        class extends HTMLElement {
+          connectedCallback() {
+            this.style.display = "block";
+            this.style.background = "var(--card-background-color, #fff)";
+            this.style.borderRadius = "18px";
+            this.style.boxShadow = "0 2px 8px rgba(0,0,0,.14)";
+          }
+        },
+      );
+
+      await import("../skywatch-card.js");
+
+      const HOME = { lat: 52.3, lon: 4.68 };
+
+      const flights = [
+        {
+          id: "1",
+          callsign: "KLM76A",
+          flight_number: "KL1495",
+          airline_short: "KLM",
+          aircraft_code: "A333",
+          aircraft_model: "Airbus A330-300",
+          aircraft_registration: "PH-AKA",
+          latitude: 52.44,
+          longitude: 4.62,
+          altitude: 34000,
+          heading: 195,
+          ground_speed: 440,
+          vertical_speed: 0,
+          airport_origin_code_iata: "AMS",
+          airport_origin_city: "Amsterdam",
+          airport_destination_code_iata: "BCN",
+          airport_destination_city: "Barcelona",
+        },
+        {
+          id: "2",
+          callsign: "TRA51W",
+          flight_number: "HV6021",
+          airline_short: "Transavia",
+          aircraft_code: "B738",
+          aircraft_model: "Boeing 737-800",
+          aircraft_registration: "PH-HXA",
+          latitude: 52.313,
+          longitude: 4.75,
+          altitude: 1400,
+          heading: 250,
+          ground_speed: 210,
+          vertical_speed: 2400,
+          airport_origin_code_iata: "AMS",
+          airport_origin_city: "Amsterdam",
+          airport_destination_code_iata: "FAO",
+          airport_destination_city: "Faro",
+        },
+        {
+          id: "3",
+          callsign: "PHMAA",
+          airline_short: "ANWB MAA",
+          aircraft_code: "EC35",
+          aircraft_model: "Airbus H135",
+          aircraft_registration: "PH-MAA",
+          latitude: 52.297,
+          longitude: 4.73,
+          altitude: 1200,
+          heading: 300,
+          ground_speed: 120,
+          vertical_speed: -200,
+        },
+        {
+          id: "4",
+          callsign: "BAW429",
+          flight_number: "BA429",
+          airline_short: "British Airways",
+          aircraft_code: "A20N",
+          aircraft_model: "Airbus A320neo",
+          latitude: 52.19,
+          longitude: 4.9,
+          altitude: 21000,
+          heading: 290,
+          ground_speed: 400,
+          vertical_speed: -1800,
+          airport_origin_code_iata: "LHR",
+          airport_origin_city: "London",
+          airport_destination_code_iata: "AMS",
+          airport_destination_city: "Amsterdam",
+        },
+        {
+          id: "5",
+          callsign: "KLM12X",
+          aircraft_code: "E195",
+          aircraft_model: "Embraer 195",
+          latitude: 52.3105,
+          longitude: 4.7683,
+          altitude: 0,
+          on_ground: true,
+          heading: 60,
+          ground_speed: 12,
+        },
+      ];
+
+      const hass = {
+        language: new URLSearchParams(location.search).get("lang") || "nl",
+        config: {
+          latitude: HOME.lat,
+          longitude: HOME.lon,
+          elevation: 2,
+          unit_system: { length: "km" },
+        },
+        states: {
+          "sensor.flightradar24_current_in_area": {
+            entity_id: "sensor.flightradar24_current_in_area",
+            state: String(flights.length),
+            last_updated: new Date().toISOString(),
+            attributes: { flights, friendly_name: "Flightradar24 Current in area" },
+          },
+          "sun.sun": {
+            entity_id: "sun.sun",
+            state: "above_horizon",
+            attributes: { elevation: 28 },
+          },
+        },
+        callService() {},
+      };
+
+      const compact = document.getElementById("compact");
+      compact.setConfig({ type: "custom:skywatch-card" });
+      compact.hass = hass;
+
+      const full = document.getElementById("full");
+      full.setConfig({ type: "custom:skywatch-card", layout: "full", map_height: 300 });
+      full.hass = hass;
+
+      // Handy from the console and from a screenshot script.
+      window.skywatchPreview = { compact, full, hass, flights };
+    </script>
+  </body>
+</html>

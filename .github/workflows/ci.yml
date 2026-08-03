@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # The visibility and loudness maths is the whole card, and it fails silently:
+  # a wrong curvature term hides the wrong aeroplanes without any error.
+  model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Test the model
+        run: node --test test/model.test.mjs
+
+  # The card is shipped unbundled and loaded as an ES module, so whatever is
+  # written here is what the browser parses. Home Assistant companion apps on
+  # older Android run WebViews well behind desktop Chrome, and a single modern
+  # token is a parse error that stops the custom element from registering at
+  # all. These checks are the floor; they cannot be caught by rendering tests
+  # in a current headless Chrome.
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ES modules arrive in Chrome 61, so that is the floor worth supporting.
+      # Parsing at ES2018 rejects optional chaining and ?? (both Chrome 80).
+      - name: Parse as ES2018
+        run: npx --yes acorn@8 --ecma2018 --module --silent skywatch-card.js
+
+      - name: Reject CSS that older WebViews drop
+        run: |
+          if grep -nE '^[[:space:]]*(inset|gap|row-gap|column-gap):' skywatch-card.js; then
+            echo "::error::inset needs Chrome 87 and flexbox gap needs Chrome 84."
+            echo "::error::Use longhand offsets and adjacent-sibling margins instead."
+            exit 1
+          fi
