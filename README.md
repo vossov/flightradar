@@ -40,7 +40,14 @@ above the horizon, the route and the numbers.
 ### HACS (custom repository)
 
 HACS → ⋮ → Custom repositories → add this repository with category
-**Dashboard**, then install it and add the resource as above.
+**Dashboard**, then install it. HACS registers the dashboard resource for you
+at `/hacsfiles/flightradar/skywatch-card.js`.
+
+If HACS answers *"Repository structure for main is not compliant"*, it looked
+at the ref it resolves to — the newest release, or the default branch when
+there are no releases — and found no file matching `filename` in `hacs.json`.
+Both `hacs.json` and `skywatch-card.js` have to be in the root of *that* ref,
+not only on a working branch.
 
 ## Quick start
 
@@ -285,6 +292,27 @@ should be filtered out.
 ```
 python3 -m http.server 8080   ->   localhost:8080/test/preview.html
 ```
+
+### Releasing
+
+Bump `CARD_VERSION` in `skywatch-card.js`, then push a matching tag:
+
+```
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+CI refuses to publish a tag whose number disagrees with `CARD_VERSION`, then
+attaches `skywatch-card.js` to the release. HACS matches the `filename` from
+`hacs.json` against the release assets before it falls back to the file tree,
+so an install pulls exactly the asset of the version it claims to be
+installing.
+
+The `HACS` workflow runs the real HACS validation. It only runs on `main` and
+on demand, because it inspects the repository as GitHub serves it — default
+branch, description, topics — rather than the checkout, so on a branch it would
+report the state of `main`. Two of the things it checks are GitHub repository
+settings rather than files: the repository needs a **description** and at least
+one **topic**.
 
 ## Notes
 

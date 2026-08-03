@@ -1,0 +1,27 @@
+name: HACS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # HACS validation depends on repository settings and on the state of the
+    # default branch, both of which can drift without anyone touching the code.
+    - cron: "0 4 * * 1"
+
+# Deliberately not run on pull requests: the action validates the repository as
+# GitHub serves it -- default branch, description, topics -- not the checkout,
+# so on a branch it reports the state of main and would sit red for reasons the
+# pull request cannot fix.
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: plugin
+          # brands is an integration-only check.
+          ignore: brands
