@@ -321,4 +321,9 @@ one **topic**.
 - The same aircraft appearing in two sensors is shown once.
 - Animations are disabled when the system asks for reduced motion.
 
+## License
+
+MIT — see [LICENSE](LICENSE). Use, modify and redistribute it, commercially
+too; the licence text travels along and there is no warranty.
+
 [fr24]: https://github.com/AlexandrErohin/home-assistant-flightradar24
