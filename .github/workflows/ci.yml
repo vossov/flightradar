@@ -90,3 +90,42 @@ jobs:
             echo "::error::CARD_VERSION, const.VERSION and the manifest version disagree."
             exit 1
           fi
+
+  # Forgetting the bump has no symptom: HACS offers no update, and browsers
+  # keep serving the card they already have out of cache. Nothing anywhere
+  # says so. Changes that ship nothing -- the README, CI, the tests -- are
+  # exempt, because they are not what HACS installs.
+  bumped:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the version went up
+        run: |
+          git fetch --quiet origin \
+            "+refs/heads/$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+          base="origin/$GITHUB_BASE_REF"
+
+          if git diff --quiet "$base...HEAD" -- custom_components/; then
+            echo "Nothing under custom_components/ changed; no bump needed."
+            exit 0
+          fi
+
+          manifest=custom_components/skywatch/manifest.json
+          new=$(grep -oP '"version": "\K[^"]+' "$manifest")
+          old=$(git show "$base:$manifest" | grep -oP '"version": "\K[^"]+')
+          echo "$base is $old, this branch is $new"
+
+          if [ "$new" = "$old" ]; then
+            echo "::error::custom_components/ changed but the version is still $old."
+            echo "::error::Bump const.py, manifest.json and CARD_VERSION together."
+            exit 1
+          fi
+
+          if [ "$(printf '%s\n%s\n' "$old" "$new" | sort -V | tail -1)" != "$new" ]; then
+            echo "::error::Version went down: $old -> $new."
+            exit 1
+          fi
