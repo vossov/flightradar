@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Skywatch",
+        "description": "Waar je staat, en tot hoe ver een vliegtuig nog de moeite waard is om naar te kijken.",
+        "data": {
+          "location": "Positie en straal",
+          "scan_interval": "Ophalen elke",
+          "max_flights": "Maximaal aantal vliegtuigen",
+          "details": "Toestel, maatschappij en route opzoeken"
+        },
+        "data_description": {
+          "location": "Sleep de marker naar waar je naar buiten stapt en rek de cirkel op tot hoe ver je wilt kijken. Zestig kilometer pakt kruisend verkeer dat nog altijd een helder kruisje aan de hemel is.",
+          "scan_interval": "Seconden tussen twee verzoeken aan Flightradar24. Dertig loopt vloeiend zonder veel te vragen van een dienst die dit gratis doet.",
+          "max_flights": "Alleen de dichtstbijzijnde blijven staan. De kaart filtert daarna nog eens op wat je kunt zien en horen, dus dit is puur een bovengrens op de omvang van de sensor.",
+          "details": "Eén extra verzoek per nieuw vliegtuig, bewaard tot het weg is. Zonder dit toont de kaart B738 in plaats van Boeing 737-800, en is er geen foto."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Die positie wordt al gevolgd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Skywatch",
+        "description": "Alles wat je bij het installeren hebt ingesteld kan hier weer anders, de positie inbegrepen.",
+        "data": {
+          "location": "Positie en straal",
+          "scan_interval": "Ophalen elke",
+          "max_flights": "Maximaal aantal vliegtuigen",
+          "details": "Toestel, maatschappij en route opzoeken"
+        },
+        "data_description": {
+          "location": "Sleep de marker naar waar je naar buiten stapt en rek de cirkel op tot hoe ver je wilt kijken.",
+          "scan_interval": "Seconden tussen twee verzoeken aan Flightradar24.",
+          "max_flights": "Alleen de dichtstbijzijnde blijven staan.",
+          "details": "Eén extra verzoek per nieuw vliegtuig, bewaard tot het weg is."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "flights": {
+        "name": "Vluchten in de buurt"
+      }
+    }
+  }
+}

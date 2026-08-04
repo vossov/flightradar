@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Skywatch",
+        "description": "Where you are standing, and how far away an aircraft can still be worth looking at.",
+        "data": {
+          "location": "Position and radius",
+          "scan_interval": "Poll every",
+          "max_flights": "Maximum aircraft",
+          "details": "Look up aircraft type, airline and route"
+        },
+        "data_description": {
+          "location": "Drag the marker to where you go outside and stretch the circle to how far you want to watch. Sixty kilometres catches cruise traffic that is still a clear cross in the sky.",
+          "scan_interval": "Seconds between requests to Flightradar24. Thirty is smooth without asking much of a service that is doing this for free.",
+          "max_flights": "Only the nearest are kept. The card filters again on what you can see and hear, so this is just a ceiling on the size of the sensor.",
+          "details": "One extra request per new aircraft, cached until it leaves. Without it the card shows B738 instead of Boeing 737-800 and has no photograph."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "That position is already being watched."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Skywatch",
+        "description": "Everything set at install can be changed here, position included.",
+        "data": {
+          "location": "Position and radius",
+          "scan_interval": "Poll every",
+          "max_flights": "Maximum aircraft",
+          "details": "Look up aircraft type, airline and route"
+        },
+        "data_description": {
+          "location": "Drag the marker to where you go outside and stretch the circle to how far you want to watch.",
+          "scan_interval": "Seconds between requests to Flightradar24.",
+          "max_flights": "Only the nearest are kept.",
+          "details": "One extra request per new aircraft, cached until it leaves."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "flights": {
+        "name": "Flights in area"
+      }
+    }
+  }
+}

@@ -2161,7 +2161,13 @@ const LIST_CSS = `
   .row .f-ear { color: var(--secondary-text-color); }
 `;
 
-customElements.define("skywatch-card", SkywatchCard);
+/* The integration loads this module for you, and someone upgrading from the
+ * card-only days will still have a Lovelace resource pointing at their own
+ * copy. Defining a name twice throws and takes the rest of the module down
+ * with it, so whoever gets there first wins and the second load is a no-op. */
+if (!customElements.get("skywatch-card")) {
+  customElements.define("skywatch-card", SkywatchCard);
+}
 
 /* ------------------------------------------------------------- the popup */
 
@@ -2510,7 +2516,9 @@ const DIALOG_CSS = `
   }
 `;
 
-customElements.define("skywatch-dialog", SkywatchDialog);
+if (!customElements.get("skywatch-dialog")) {
+  customElements.define("skywatch-dialog", SkywatchDialog);
+}
 
 /* ------------------------------------------------------------ gui editor */
 
@@ -2706,25 +2714,29 @@ class SkywatchCardEditor extends HTMLElement {
   }
 }
 
-customElements.define("skywatch-card-editor", SkywatchCardEditor);
+if (!customElements.get("skywatch-card-editor")) {
+  customElements.define("skywatch-card-editor", SkywatchCardEditor);
+}
 
 /* ------------------------------------------------------------ card picker */
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "skywatch-card",
-  name: "Skywatch",
-  preview: true,
-  documentationURL: "https://github.com/vossov/flightradar",
-  description:
-    "Flightradar24, filtered by what you can actually see and hear from your garden, on a sky dome.",
-});
+if (!window.customCards.some((card) => card.type === "skywatch-card")) {
+  window.customCards.push({
+    type: "skywatch-card",
+    name: "Skywatch",
+    preview: true,
+    documentationURL: "https://github.com/vossov/flightradar",
+    description:
+      "Flightradar24, filtered by what you can actually see and hear from your garden, on a sky dome.",
+  });
 
-console.info(
-  `%c SKYWATCH-CARD %c ${CARD_VERSION} `,
-  "background:#101014;color:#fff;border-radius:3px 0 0 3px;padding:1px 4px",
-  "background:#7cc4ff;color:#101014;border-radius:0 3px 3px 0;padding:1px 4px",
-);
+  console.info(
+    `%c SKYWATCH-CARD %c ${CARD_VERSION} `,
+    "background:#101014;color:#fff;border-radius:3px 0 0 3px;padding:1px 4px",
+    "background:#7cc4ff;color:#101014;border-radius:0 3px 3px 0;padding:1px 4px",
+  );
+}
 
 /* --------------------------------------------------------------- exports */
 

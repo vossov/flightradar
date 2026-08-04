@@ -1,0 +1,44 @@
+{
+  "attributes": {
+    "attribution": "Data provided by Flightradar24",
+    "flights": [
+      {
+        "aircraft_code": "B738",
+        "aircraft_model": "Boeing 737-8K2",
+        "aircraft_photo_medium": "https://img.example/medium.jpg",
+        "aircraft_photo_small": "https://img.example/small.jpg",
+        "aircraft_registration": "PH-BXA",
+        "airline": "KLM Royal Dutch Airlines",
+        "airline_iata": "KL",
+        "airline_icao": "KLM",
+        "airline_short": "KLM",
+        "airport_destination_city": "Barcelona",
+        "airport_destination_code_iata": "BCN",
+        "airport_destination_code_icao": "LEBL",
+        "airport_destination_name": "Barcelona El Prat Airport",
+        "airport_origin_city": "Amsterdam",
+        "airport_origin_code_iata": "AMS",
+        "airport_origin_code_icao": "EHAM",
+        "airport_origin_name": "Amsterdam Schiphol Airport",
+        "altitude": 3200,
+        "callsign": "KLM1673",
+        "distance": 4.89,
+        "flight_number": "KL1673",
+        "ground_speed": 212,
+        "heading": 184,
+        "icao_24bit": "484BA1",
+        "id": "2f8a1c9",
+        "latitude": 52.35,
+        "longitude": 4.8,
+        "on_ground": false,
+        "squawk": "1000",
+        "time": 1755000000,
+        "vertical_speed": -1088
+      }
+    ],
+    "radius_km": 30,
+    "station_latitude": 52.3105,
+    "station_longitude": 4.7683
+  },
+  "state": 1
+}

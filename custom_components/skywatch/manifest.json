@@ -1,0 +1,13 @@
+{
+  "domain": "skywatch",
+  "name": "Skywatch",
+  "codeowners": ["@vossov"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http"],
+  "documentation": "https://github.com/vossov/flightradar",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/vossov/flightradar/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

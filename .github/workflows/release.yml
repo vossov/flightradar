@@ -4,10 +4,12 @@ on:
   push:
     tags: ["v*"]
 
-# HACS prefers a release over the default branch: it looks for the file named
-# in hacs.json among the release assets first, and only falls back to the file
-# tree. Attaching the card means an install pulls exactly the asset of the
-# version it says it is installing.
+env:
+  CARD: custom_components/skywatch/frontend/skywatch-card.js
+
+# HACS installs an integration from the newest release, taking the contents of
+# custom_components/skywatch at that tag. There is nothing to attach: the card
+# travels inside the integration that serves it.
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -20,24 +22,38 @@ jobs:
         with:
           node-version: "20"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       # Never publish a tag that would not load in the browsers the card claims
       # to support.
       - name: Parse as ES2018
-        run: npx --yes acorn@8 --ecma2018 --module --silent skywatch-card.js
+        run: npx --yes acorn@8 --ecma2018 --module --silent "$CARD"
 
       - name: Test the model
-        run: node --test test/model.test.mjs
+        run: node --test test/model.test.mjs test/contract.test.mjs
 
-      - name: Check the tag matches CARD_VERSION
+      - name: Test the client
         run: |
-          version=$(grep -oP 'CARD_VERSION = "\K[^"]+' skywatch-card.js)
+          pip install aiohttp
+          python -m unittest discover -s test -p 'test_*.py'
+
+      - name: Check the tag matches every version
+        run: |
+          card=$(grep -oP 'CARD_VERSION = "\K[^"]+' "$CARD")
+          const=$(grep -oP '^VERSION = "\K[^"]+' custom_components/skywatch/const.py)
+          manifest=$(grep -oP '"version": "\K[^"]+' custom_components/skywatch/manifest.json)
           tag="${GITHUB_REF_NAME#v}"
-          if [ "$version" != "$tag" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match CARD_VERSION $version"
-            exit 1
-          fi
+          for name in card const manifest; do
+            eval "value=\$$name"
+            if [ "$value" != "$tag" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match $name version $value"
+              exit 1
+            fi
+          done
 
       - name: Publish
-        run: gh release create "$GITHUB_REF_NAME" skywatch-card.js --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
