@@ -16,10 +16,10 @@ globalThis.HTMLElement = class {
     return { innerHTML: "", appendChild() {}, querySelector: () => null };
   }
 };
-globalThis.customElements = { define() {} };
+globalThis.customElements = { define() {}, get: () => undefined };
 globalThis.window = globalThis;
 
-const model = await import("../skywatch-card.js");
+const model = await import("../custom_components/skywatch/frontend/skywatch-card.js");
 const {
   DEFAULTS,
   haversine,

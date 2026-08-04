@@ -1,7 +1,12 @@
 # Skywatch
 
-A Lovelace card for the [Flightradar24 integration][fr24] that filters on what
-you can actually see and hear, instead of on distance.
+A Home Assistant integration and Lovelace card that show the aircraft you can
+actually see and hear from your garden, instead of the ones that happen to be
+within a radius.
+
+It is one install. The integration polls Flightradar24 for the traffic around
+your house, and it serves and registers the card itself — there is no second
+integration to add and nothing to paste under Resources.
 
 Radius is the wrong question. A 737 sitting on a Schiphol taxiway six
 kilometres away is invisible behind the first row of houses and inaudible over
@@ -29,25 +34,75 @@ above the horizon, the route and the numbers.
 
 ## Installation
 
-### Manual
-
-1. Copy `skywatch-card.js` to `/config/www/`.
-2. Settings → Dashboards → ⋮ → Resources → **Add resource**
-   - URL: `/local/skywatch-card.js`
-   - Type: **JavaScript module**
-3. Reload the page (hard refresh if the card does not show up).
+Home Assistant 2024.11 or newer.
 
 ### HACS (custom repository)
 
 HACS → ⋮ → Custom repositories → add this repository with category
-**Dashboard**, then install it. HACS registers the dashboard resource for you
-at `/hacsfiles/flightradar/skywatch-card.js`.
+**Integration**, install it, and restart Home Assistant. Then
+Settings → Devices & services → **Add integration** → *Skywatch*.
 
 If HACS answers *"Repository structure for main is not compliant"*, it looked
 at the ref it resolves to — the newest release, or the default branch when
-there are no releases — and found no file matching `filename` in `hacs.json`.
-Both `hacs.json` and `skywatch-card.js` have to be in the root of *that* ref,
-not only on a working branch.
+there are no releases — and found no `custom_components/skywatch/manifest.json`
+there. It has to be on *that* ref, not only on a working branch.
+
+### Manual
+
+1. Copy the `custom_components/skywatch` directory into `/config/custom_components/`.
+2. Restart Home Assistant.
+3. Settings → Devices & services → **Add integration** → *Skywatch*.
+
+Either way the card comes with it. The integration serves it at
+`/skywatch/skywatch-card.js` and tells the frontend to load it, so it appears
+in the card picker without a Resources entry. If you are coming from the
+card-only version, delete your old `/local/skywatch-card.js` resource — the
+card survives being loaded twice, but you would be pinning yourself to a stale
+copy.
+
+## Setting it up
+
+The config flow asks two things: a marker for where you go outside, and a
+circle for how far you want to watch. Sixty kilometres is a good start — it
+catches cruise traffic that is still a clear white cross overhead.
+
+That gives you `sensor.skywatch_flights_in_area`: a count, with the flights
+themselves in a `flights` attribute. The other three options are about how hard
+Flightradar24 gets asked.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| Position and radius | *(home)* | Where you stand and how far the circle reaches. |
+| Poll every | `30` s | Seconds between requests. |
+| Maximum aircraft | `40` | Nearest first; a ceiling on the size of the sensor. |
+| Look up type, airline and route | on | One extra request per new aircraft, cached until it leaves. Without it the card shows `B738` rather than *Boeing 737-800*, and there is no photograph. |
+
+All of it, position included, can be changed afterwards under **Configure**.
+
+Two circles are two entries: add the integration again for the office, or for
+the holiday house.
+
+### Where the data comes from
+
+Flightradar24 has no free documented API, so what is used here is the pair of
+endpoints its own website calls. That is the same source the
+[Flightradar24 custom integration][fr24] uses, and it comes with the same
+caveat: it is not a contract, and it can change or start refusing without
+notice. If it does, the sensor goes unavailable with the reason in the log and
+Skywatch backs its polling off until it is being answered again, rather than
+hammering a service that is doing this for free.
+
+### If you already run the Flightradar24 integration
+
+Keep it. The sensor published here has the same `flights` shape, and the card
+reads whatever it finds, so the two are interchangeable and can run side by
+side. Point the card at whichever you prefer:
+
+```yaml
+type: custom:skywatch-card
+entities:
+  - sensor.flightradar24_current_in_area
+```
 
 ## Quick start
 
@@ -56,18 +111,9 @@ type: custom:skywatch-card
 ```
 
 That is the whole configuration. With no `entities` the card picks up every
-Flightradar24 sensor that publishes a `flights` attribute, and it takes your
-position and elevation from the Home Assistant settings. It shows up in the
-card picker as *Skywatch* and has a GUI editor.
-
-To be explicit about the sources:
-
-```yaml
-type: custom:skywatch-card
-entities:
-  - sensor.flightradar24_current_in_area
-  - sensor.flightradar24_additional_tracked
-```
+sensor that publishes a `flights` attribute, and it takes your position and
+elevation from the Home Assistant settings. It shows up in the card picker as
+*Skywatch* and has a GUI editor.
 
 The map and the list inline on the dashboard instead of only in the popup:
 
@@ -277,12 +323,32 @@ resize listener.
 ## Development
 
 ```
-node --test test/model.test.mjs
+custom_components/skywatch/
+  flightradar24.py   the feed client, no Home Assistant in it
+  coordinator.py     polling, and backing off when the feed says no
+  sensor.py          the count, with the flights in an attribute
+  config_flow.py     position, radius, and how hard to poll
+  frontend/          the card the integration serves
 ```
 
-The geometry and the sound model are the part that cannot be eyeballed — a
-wrong curvature term just quietly hides the wrong aeroplanes — so they are
-covered by tests against cases you can check by walking outside.
+```
+node --test test/model.test.mjs test/contract.test.mjs   # the card
+python3 -m unittest discover -s test -p 'test_*.py'      # the feed client
+```
+
+Two things here cannot be eyeballed. The geometry and the sound model decide
+which aeroplanes you are shown, and a wrong curvature term just quietly hides
+the wrong ones. The feed answers with bare lists where position is the only
+thing that names a field, so an index off by one reports a squawk code as an
+altitude without anything raising. Both are covered against cases you can check
+— one by walking outside, the other against payloads shaped like the real ones.
+
+The seam between them has no validation either: the sensor writes field names
+and the card reads them, and a rename on one side just empties a line in the
+popup. `test/fixtures/sensor.json` is exactly what the sensor puts in front of
+the card, and both sides are pinned to it — the Python tests assert the client
+still produces it, `test/contract.test.mjs` asserts the card still reads it,
+units included.
 
 `test/preview.html` renders the card against a fixed set of flights without a
 Home Assistant: one cruising overhead, one climbing out of Schiphol that you
@@ -295,24 +361,29 @@ python3 -m http.server 8080   ->   localhost:8080/test/preview.html
 
 ### Releasing
 
-Bump `CARD_VERSION` in `skywatch-card.js`, then push a matching tag:
+The version lives in three places — `CARD_VERSION` in the card, `VERSION` in
+`const.py`, and `version` in `manifest.json` — because the integration serves
+the card at a URL stamped with it, and a browser that misses an upgrade is a
+version that was bumped in only two of them. CI checks they agree on every
+push. Bump all three, then push a matching tag:
 
 ```
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-CI refuses to publish a tag whose number disagrees with `CARD_VERSION`, then
-attaches `skywatch-card.js` to the release. HACS matches the `filename` from
-`hacs.json` against the release assets before it falls back to the file tree,
-so an install pulls exactly the asset of the version it claims to be
-installing.
+CI refuses to publish a tag that disagrees with any of them. HACS installs the
+contents of `custom_components/skywatch` at the newest release, so there is
+nothing to attach — the card travels inside the integration that serves it.
 
 The `HACS` workflow runs the real HACS validation. It only runs on `main` and
 on demand, because it inspects the repository as GitHub serves it — default
 branch, description, topics — rather than the checkout, so on a branch it would
 report the state of `main`. Two of the things it checks are GitHub repository
 settings rather than files: the repository needs a **description** and at least
-one **topic**.
+one **topic**. Its `brands` check is skipped, because that one wants the domain
+to be registered in `home-assistant/brands`, which is for integrations shipping
+with Home Assistant rather than installed by hand; HACS installs it either way
+and the icon is simply the default one.
 
 ## Notes
 

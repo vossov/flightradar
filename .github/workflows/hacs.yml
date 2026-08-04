@@ -22,6 +22,9 @@ jobs:
       - name: HACS validation
         uses: hacs/action@main
         with:
-          category: plugin
-          # brands is an integration-only check.
+          category: integration
+          # brands wants the domain to be in home-assistant/brands, which is
+          # for integrations that ship with Home Assistant or are on the way
+          # there. A custom integration installed by hand is not, and HACS
+          # installs it regardless -- the icon is simply the default one.
           ignore: brands

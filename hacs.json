@@ -1,5 +1,5 @@
 {
   "name": "Skywatch",
   "render_readme": true,
-  "filename": "skywatch-card.js"
+  "homeassistant": "2024.11.0"
 }

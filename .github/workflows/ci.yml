@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+env:
+  CARD: custom_components/skywatch/frontend/skywatch-card.js
+
 jobs:
   # The visibility and loudness maths is the whole card, and it fails silently:
   # a wrong curvature term hides the wrong aeroplanes without any error.
@@ -15,7 +18,32 @@ jobs:
         with:
           node-version: "20"
       - name: Test the model
-        run: node --test test/model.test.mjs
+        run: node --test test/model.test.mjs test/contract.test.mjs
+
+  # The feed answers with bare lists where position is the only thing that
+  # names a field, so an index off by one reports a squawk code as an altitude
+  # without anything raising.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install aiohttp ruff
+      - name: Lint
+        run: ruff check custom_components/skywatch test/test_feed.py
+      - name: Test the client
+        run: python -m unittest discover -s test -p 'test_*.py'
+
+  # Home Assistant's own check on the manifest, the translations and the
+  # config flow.
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
 
   # The card is shipped unbundled and loaded as an ES module, so whatever is
   # written here is what the browser parses. Home Assistant companion apps on
@@ -35,12 +63,30 @@ jobs:
       # ES modules arrive in Chrome 61, so that is the floor worth supporting.
       # Parsing at ES2018 rejects optional chaining and ?? (both Chrome 80).
       - name: Parse as ES2018
-        run: npx --yes acorn@8 --ecma2018 --module --silent skywatch-card.js
+        run: npx --yes acorn@8 --ecma2018 --module --silent "$CARD"
 
       - name: Reject CSS that older WebViews drop
         run: |
-          if grep -nE '^[[:space:]]*(inset|gap|row-gap|column-gap):' skywatch-card.js; then
+          if grep -nE '^[[:space:]]*(inset|gap|row-gap|column-gap):' "$CARD"; then
             echo "::error::inset needs Chrome 87 and flexbox gap needs Chrome 84."
             echo "::error::Use longhand offsets and adjacent-sibling margins instead."
+            exit 1
+          fi
+
+  # Three files carry the version, and the integration serves the card at a URL
+  # stamped with it. A version bumped in two of the three is a browser that
+  # keeps serving the old card out of its cache.
+  versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the versions agree
+        run: |
+          card=$(grep -oP 'CARD_VERSION = "\K[^"]+' "$CARD")
+          const=$(grep -oP '^VERSION = "\K[^"]+' custom_components/skywatch/const.py)
+          manifest=$(grep -oP '"version": "\K[^"]+' custom_components/skywatch/manifest.json)
+          echo "card=$card const=$const manifest=$manifest"
+          if [ "$card" != "$const" ] || [ "$card" != "$manifest" ]; then
+            echo "::error::CARD_VERSION, const.VERSION and the manifest version disagree."
             exit 1
           fi
