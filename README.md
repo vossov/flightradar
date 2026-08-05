@@ -55,10 +55,37 @@ there. It has to be on *that* ref, not only on a working branch.
 
 Either way the card comes with it. The integration serves it at
 `/skywatch/skywatch-card.js` and tells the frontend to load it, so it appears
-in the card picker without a Resources entry. If you are coming from the
-card-only version, delete your old `/local/skywatch-card.js` resource — the
-card survives being loaded twice, but you would be pinning yourself to a stale
-copy.
+in the card picker without a Resources entry.
+
+### Upgrading from the card-only version
+
+Skywatch used to be a Dashboard repository in HACS, and HACS records the
+category when you *add* a custom repository — not from `hacs.json`, and not
+again afterwards. Removing the download leaves that registration in place, so
+every fresh download lands back in `config/www/community/flightradar/` as
+though it were still a card. The registration has to go, not just the download:
+
+1. HACS → Skywatch → ⋮ → **Remove**.
+2. HACS → ⋮ → **Custom repositories** → find the repository in that list and
+   delete it there. This is the step that actually clears the category.
+3. Settings → Dashboards → ⋮ → **Resources** → delete
+   `/hacsfiles/flightradar/skywatch-card.js`.
+4. Delete `/config/www/community/flightradar/` by hand. HACS does not always
+   take it with it.
+5. **Restart Home Assistant.** HACS keeps its repository list in memory, and
+   without a restart the old entry comes straight back.
+6. Add the repository again, now with category **Integration**, download it,
+   and restart once more.
+7. Settings → Devices & services → **Add integration** → *Skywatch*.
+8. Hard refresh the browser (Ctrl+Shift+R). The old module is otherwise still
+   in its cache.
+
+If HACS answers *"Repository structure is not compliant"* after step 6, it is
+still working from cached repository data: ⋮ → **Reload data**, then try again.
+
+A leftover `/local/skywatch-card.js` resource from a manual install is worth
+deleting too. The card survives being loaded twice — the element registration
+is guarded — but you would be pinning yourself to a stale copy of it.
 
 ## Setting it up
 
