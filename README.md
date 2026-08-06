@@ -347,6 +347,38 @@ a rendering test in a current headless Chrome cannot catch any of it.
 `ResizeObserver` (Chrome 64) is used where available and falls back to a window
 resize listener.
 
+## When the card says "Configuration error"
+
+Home Assistant puts a grey tile reading *Configuration error* where the card
+should be, and the line under it says which of two quite different things
+happened.
+
+**"Custom element doesn't exist: skywatch-card."** The card's JavaScript had
+not registered by the time the dashboard drew itself. Home Assistant allows two
+seconds and then shows this, so it is a loading problem and not a configuration
+one — which is why it comes and goes, and why it often rights itself a moment
+later or on the next visit. Worth checking, in order:
+
+- A **hard refresh** (Ctrl+Shift+R; in the companion app, clear the frontend
+  cache from the app's settings). A browser holding a half-loaded or stale copy
+  of the module is the usual reason.
+- **The integration is actually loaded.** The card is served by the integration
+  itself, so with the entry removed or failing to start there is nothing at
+  `/skywatch/skywatch-card.js`. Opening that URL directly should return
+  JavaScript, not a 404.
+- **A second copy from an older install.** A leftover Resources entry pointing
+  at `/hacsfiles/` or `/local/` loads a different version of the same card; see
+  *Upgrading from the card-only version* above.
+
+**Anything else on that line** is the card refusing the configuration, and the
+message names what it tripped over. The card is deliberately forgiving about
+how `entities` is written — one sensor or a list, ids or rows — so this
+normally means a genuine typo in the YAML.
+
+Neither of these is the integration failing. That shows up under Settings →
+Devices & services instead, usually as *Retrying setup* while Flightradar24 is
+refusing requests; the poll interval stretches by itself until it stops.
+
 ## Development
 
 ```
