@@ -14,10 +14,19 @@ import { readFileSync } from "node:fs";
 
 globalThis.HTMLElement = class {
   attachShadow() {
-    return { innerHTML: "", appendChild() {}, querySelector: () => null };
+    this.shadowRoot = { innerHTML: "", appendChild() {}, querySelector: () => null };
+    return this.shadowRoot;
   }
 };
-globalThis.customElements = { define() {}, get: () => undefined };
+// Keep what the card registers: setConfig is the other half of the seam, and
+// the class itself is not exported.
+const defined = {};
+globalThis.customElements = {
+  define(name, cls) {
+    defined[name] = cls;
+  },
+  get: () => undefined,
+};
 globalThis.window = globalThis;
 
 const { DEFAULTS, extractFlights, evaluateFlight } = await import(
@@ -97,4 +106,26 @@ test("the fixture aircraft is one you would actually see", () => {
     Math.abs(flight.groundM / 1000 - raw.distance) < 0.05,
     `${flight.groundM / 1000} vs ${raw.distance}`,
   );
+});
+
+/*
+ * Anything setConfig throws is shown by Home Assistant as a configuration
+ * error in place of the card, which is both alarming and misleading when the
+ * configuration is merely untidy. A single sensor written without a list is
+ * the one people write by hand, and it used to be a TypeError.
+ */
+test("the card accepts every shape an entity list gets written in", () => {
+  const card = new defined["skywatch-card"]();
+  const entitiesFor = (entities) => {
+    card.setConfig({ type: "custom:skywatch-card", entities });
+    return card._config.entities;
+  };
+
+  assert.deepEqual(entitiesFor(["sensor.a", "sensor.b"]), ["sensor.a", "sensor.b"]);
+  assert.deepEqual(entitiesFor("sensor.a"), ["sensor.a"], "a bare entity id");
+  assert.deepEqual(entitiesFor({ entity: "sensor.a" }), ["sensor.a"], "a bare row");
+  assert.deepEqual(entitiesFor([{ entity_id: "sensor.a" }]), ["sensor.a"]);
+  assert.deepEqual(entitiesFor(null), [], "cleared by the editor");
+  assert.deepEqual(entitiesFor([null, "", "sensor.a"]), ["sensor.a"], "holes");
+  assert.deepEqual(entitiesFor(undefined), [], "never set: every sensor is used");
 });

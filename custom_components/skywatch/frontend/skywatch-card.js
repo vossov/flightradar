@@ -18,7 +18,7 @@
  * as a module resource.
  */
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.0.1";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -1465,16 +1465,35 @@ class SkywatchCard extends HTMLElement {
     return document.createElement("skywatch-card-editor");
   }
 
+  /* Anything thrown from here is what Home Assistant turns into the grey
+   * "Configuration error" tile in place of the card, so this has to cope with
+   * whatever is in the YAML rather than trust it. A single entity written
+   * without a list, or a `null` left behind by the editor, is a mistake worth
+   * surviving; only a config that names no usable sensor at all is worth
+   * refusing over. */
   setConfig(config) {
-    const entities = (config.entities || [])
+    const given = config.entities;
+    const listed = given === undefined || given === null ? [] : [].concat(given);
+    const entities = listed
       .map((item) => (typeof item === "string" ? item : item && (item.entity || item.entity_id)))
-      .filter(Boolean);
+      .filter((id) => typeof id === "string" && id.length > 0);
 
     this._config = { ...DEFAULTS, ...config, entities };
     this._built = false;
     this._history = {};
     this.shadowRoot.innerHTML = "";
-    if (this._hass) this._build();
+    /* Building reads the live state, so it can fail for reasons that have
+     * nothing to do with the configuration. Reporting that as a configuration
+     * error sends people to edit YAML that was never wrong; leave the card
+     * unbuilt instead and let the next state update try again. */
+    if (this._hass) {
+      try {
+        this._build();
+      } catch (err) {
+        console.error("skywatch-card: could not build the card", err);
+        this._built = false;
+      }
+    }
   }
 
   set hass(hass) {
