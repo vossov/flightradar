@@ -18,7 +18,7 @@
  * as a module resource.
  */
 
-const CARD_VERSION = "1.0.1";
+const CARD_VERSION = "1.1.0";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -675,7 +675,10 @@ function evaluateFlight(raw, ctx) {
     callsign: raw.callsign || raw.flight_number || raw.aircraft_registration || "",
     flightNumber: raw.flight_number || "",
     registration: raw.aircraft_registration || "",
+    // Two names for one airline: the list has room for "KLM" and the popup
+    // has room for "KLM Royal Dutch Airlines". The feed may send either.
     airline: raw.airline_short || raw.airline || "",
+    airlineName: raw.airline || raw.airline_short || "",
     model: raw.aircraft_model || "",
     code: raw.aircraft_code || "",
     photo: raw.aircraft_photo_medium || raw.aircraft_photo_small || null,
@@ -1295,6 +1298,17 @@ function svgIcon(path, size) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}"><path d="${path}"/></svg>`;
 }
 
+/* An airport written out: its name, and the city in front of it when the name
+ * does not already say it. Empty when the feed gave us neither, which is
+ * every flight whose detail lookup has not come back yet. */
+function placeName(port) {
+  const name = port.name || "";
+  const city = port.city || "";
+  if (!name) return city;
+  if (!city || name.toLowerCase().indexOf(city.toLowerCase()) !== -1) return name;
+  return `${city} ${name}`;
+}
+
 function routeLine(flight) {
   const from = flight.origin.iata || flight.origin.city;
   const to = flight.destination.iata || flight.destination.city;
@@ -1357,8 +1371,12 @@ function detailMarkup(flight, ctx) {
     ? `<div class="photo" style="background-image:url('${escapeHtml(photoUrl)}')"></div>`
     : "";
 
-  const originCity = escapeHtml(flight.origin.city || flight.origin.name || "");
-  const destCity = escapeHtml(flight.destination.city || flight.destination.name || "");
+  // The list is where the three-letter codes belong; here there is room to
+  // say which airport that is. The city is a fallback for a feed that named
+  // one and not the other, and an addition when the name does not carry it --
+  // "Heathrow" reads better as London's than on its own.
+  const originPlace = escapeHtml(placeName(flight.origin));
+  const destPlace = escapeHtml(placeName(flight.destination));
 
   const arrowAngle = flight.bearing;
 
@@ -1366,7 +1384,7 @@ function detailMarkup(flight, ctx) {
     ${photo}
     <div class="dhead">
       <div class="dtitle">${escapeHtml(flight.callsign || t("unknown"))}</div>
-      <div class="dsub">${[flight.airline, flight.model || flight.code, flight.registration]
+      <div class="dsub">${[flight.airlineName, flight.model || flight.code, flight.registration]
         .filter(Boolean)
         .map(escapeHtml)
         .join(" · ")}</div>
@@ -1391,9 +1409,9 @@ function detailMarkup(flight, ctx) {
     </div>
 
     <div class="route">
-      <div class="port"><b>${escapeHtml(flight.origin.iata || "–")}</b><span>${originCity}</span></div>
+      <div class="port"><b>${escapeHtml(flight.origin.iata || "–")}</b><span>${originPlace}</span></div>
       <div class="leg">${svgIcon(ICONS.plane, 16)}</div>
-      <div class="port right"><b>${escapeHtml(flight.destination.iata || "–")}</b><span>${destCity}</span></div>
+      <div class="port right"><b>${escapeHtml(flight.destination.iata || "–")}</b><span>${destPlace}</span></div>
     </div>
 
     <div class="stats">
@@ -2468,13 +2486,15 @@ const DIALOG_CSS = `
   .route .port { flex: 1 1 0; min-width: 0; }
   .route .port.right { text-align: right; }
   .route .port b { display: block; font-size: 15px; }
+  /* Written-out airport names are long, so they wrap rather than ellipse; a
+   * name cut off after "Amsterdam Sch" is no better than the code above it. */
   .route .port span {
     display: block;
     font-size: 11px;
+    line-height: 1.3;
     color: var(--secondary-text-color);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
   }
   .route .leg { flex: 0 0 auto; padding: 0 12px; color: var(--secondary-text-color); }
   .route .leg svg { fill: currentColor; display: block; transform: rotate(90deg); }
@@ -2781,6 +2801,7 @@ export {
   formatAltitude,
   formatSeconds,
   compassName,
+  placeName,
   translator,
   pickLanguage,
   escapeHtml,

@@ -5,7 +5,7 @@ DOMAIN = "skywatch"
 # Kept in step with CARD_VERSION in frontend/skywatch-card.js and with the
 # version in manifest.json; the release workflow refuses a tag where the three
 # disagree.
-VERSION = "1.0.1"
+VERSION = "1.1.0"
 
 CONF_RADIUS_KM = "radius_km"
 CONF_MAX_FLIGHTS = "max_flights"
