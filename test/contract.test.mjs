@@ -29,7 +29,7 @@ globalThis.customElements = {
 };
 globalThis.window = globalThis;
 
-const { DEFAULTS, extractFlights, evaluateFlight } = await import(
+const { DEFAULTS, extractFlights, evaluateFlight, placeName } = await import(
   "../custom_components/skywatch/frontend/skywatch-card.js"
 );
 
@@ -66,16 +66,39 @@ test("every field the integration sends arrives somewhere the card uses", () => 
   assert.equal(flight.flightNumber, "KL1673");
   assert.equal(flight.registration, "PH-BXA");
   assert.equal(flight.airline, "KLM");
+  assert.equal(flight.airlineName, "KLM Royal Dutch Airlines");
   assert.equal(flight.model, "Boeing 737-8K2");
   assert.equal(flight.code, "B738");
   assert.equal(flight.photo, "https://img.example/medium.jpg");
   assert.equal(flight.origin.iata, "AMS");
   assert.equal(flight.origin.city, "Amsterdam");
+  assert.equal(flight.origin.name, "Amsterdam Schiphol Airport");
   assert.equal(flight.destination.iata, "BCN");
   assert.equal(flight.destination.city, "Barcelona");
+  assert.equal(flight.destination.name, "Barcelona El Prat Airport");
   assert.equal(flight.onGround, false);
   assert.equal(flight.heading, 184);
   assert.equal(flight.hasHeading, true);
+});
+
+/*
+ * The popup writes the airports out, and the two fields it writes them from
+ * are independently optional -- a detail lookup that has not come back yet
+ * has neither, and the feed names some airports without their city.
+ */
+test("an airport is written out from whichever of the two fields arrived", () => {
+  assert.equal(
+    placeName({ name: "Amsterdam Schiphol Airport", city: "Amsterdam" }),
+    "Amsterdam Schiphol Airport",
+    "no city repeated in front of a name that already says it",
+  );
+  assert.equal(
+    placeName({ name: "Heathrow Airport", city: "London" }),
+    "London Heathrow Airport",
+  );
+  assert.equal(placeName({ name: "", city: "Faro" }), "Faro", "no name yet");
+  assert.equal(placeName({ name: "Kastrup", city: "" }), "Kastrup", "no city");
+  assert.equal(placeName({ name: "", city: "" }), "", "no detail at all");
 });
 
 test("the units the integration sends are the units the card assumes", () => {
