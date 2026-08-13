@@ -13,7 +13,12 @@ from pathlib import Path
 from homeassistant.components import frontend
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, CONF_SCAN_INTERVAL, Platform
+from homeassistant.const import (
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_SCAN_INTERVAL,
+    Platform,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType

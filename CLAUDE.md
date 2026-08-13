@@ -61,6 +61,11 @@ node test/floor.mjs custom_components/skywatch/frontend/skywatch-card.js
 ruff check custom_components/skywatch test/test_feed.py
 ```
 
+CI pins ruff. Its default rule set grows between releases, and an unpinned one
+fails a build for something the change under test did not do — which is how a
+pull request that had bumped the version correctly came to be reported as
+failing the version gate. Raise the pin deliberately, in its own diff.
+
 Four things here fail silently and are covered because of it:
 
 - **The geometry and the sound model.** A wrong curvature term hides the wrong

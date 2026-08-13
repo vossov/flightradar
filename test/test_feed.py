@@ -137,6 +137,7 @@ class TestGeometry(unittest.TestCase):
         self.assertLessEqual(north, 90.0)
         self.assertLessEqual(east, 180.0)
         self.assertGreaterEqual(south, -90.0)
+        self.assertGreaterEqual(west, -180.0)
 
     def test_distance_over_the_ground(self):
         # A tenth of a degree of latitude is 11.1 km anywhere.
