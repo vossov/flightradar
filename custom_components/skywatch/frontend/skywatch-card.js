@@ -18,7 +18,7 @@
  * as a module resource.
  */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.1.1";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -574,6 +574,12 @@ function toMetresPerSecond(value, unit) {
 function evaluateFlight(raw, ctx) {
   const config = ctx.config;
   const home = ctx.home;
+
+  // A hole in the list is a row that is not there, not a reason to stop. Only
+  // `null` actually matters -- a string or a number reads as a flight with no
+  // position and falls out two lines down -- but a null reaches `raw.latitude`
+  // as a TypeError, and the list is not always ours to trust.
+  if (!raw || typeof raw !== "object") return null;
 
   let lat = num(raw.latitude);
   let lon = num(raw.longitude);
@@ -1300,10 +1306,15 @@ function svgIcon(path, size) {
 
 /* An airport written out: its name, and the city in front of it when the name
  * does not already say it. Empty when the feed gave us neither, which is
- * every flight whose detail lookup has not come back yet. */
+ * every flight whose detail lookup has not come back yet.
+ *
+ * Both fields are coerced rather than trusted: this card reads whatever
+ * publishes a `flights` attribute, including the other Flightradar24
+ * integration and hand-written template sensors, and `toLowerCase` on a number
+ * is a TypeError rather than a missing line in the popup. */
 function placeName(port) {
-  const name = port.name || "";
-  const city = port.city || "";
+  const name = port.name === null || port.name === undefined ? "" : String(port.name);
+  const city = port.city === null || port.city === undefined ? "" : String(port.city);
   if (!name) return city;
   if (!city || name.toLowerCase().indexOf(city.toLowerCase()) !== -1) return name;
   return `${city} ${name}`;
@@ -1499,11 +1510,24 @@ class SkywatchCard extends HTMLElement {
     this._config = { ...DEFAULTS, ...config, entities };
     this._built = false;
     this._history = {};
+    // Emptying the shadow root detaches everything `_els` names and the map's
+    // own root, so drop the references with the nodes. The map has to be told:
+    // it is holding a ResizeObserver, or a window resize listener on the older
+    // WebViews, that nothing else will take back.
+    if (this._map) {
+      this._map.destroy();
+      this._map = null;
+    }
+    this._els = {};
     this.shadowRoot.innerHTML = "";
     /* Building reads the live state, so it can fail for reasons that have
      * nothing to do with the configuration. Reporting that as a configuration
      * error sends people to edit YAML that was never wrong; leave the card
-     * unbuilt instead and let the next state update try again. */
+     * unbuilt instead and let the next state update try again.
+     *
+     * Home Assistant sets the config before it sets `hass`, so on a fresh card
+     * this branch is skipped and the first build happens in the setter below.
+     * That is the one that has to hold. */
     if (this._hass) {
       try {
         this._build();
@@ -1514,11 +1538,35 @@ class SkywatchCard extends HTMLElement {
     }
   }
 
+  /*
+   * The card's real entry point, and the one that has to survive anything.
+   *
+   * Home Assistant calls this for every state change in the system, and it
+   * wraps the call: whatever escapes is caught in `hui-card`, which throws the
+   * card away and puts its grey "Configuration error" tile there instead. That
+   * tile is worse than it looks. The replacement has no `hass` property, so
+   * every later state update lands on nothing, and the card stays gone until
+   * the page is reloaded -- one unlucky update, and the dashboard is dead for
+   * the rest of the session.
+   *
+   * Almost nothing that can fail in here is a configuration problem: it is a
+   * feed that sent a shape we did not expect, or a browser missing something
+   * the code assumed. Log it, throw the half-built DOM away, and let the next
+   * update -- two seconds later at worst -- try again.
+   */
   set hass(hass) {
+    // Outside the try: a failed render must not also cost us the newest state.
     this._hass = hass;
     if (!this._config) return;
-    if (!this._built) this._build();
-    this._refresh(true);
+    try {
+      if (!this._built) this._build();
+      this._refresh(true);
+    } catch (err) {
+      console.error("skywatch-card: could not update the card", err);
+      // `_build` starts by emptying the shadow root, so a rebuild discards a
+      // half-built card rather than adding to it.
+      this._built = false;
+    }
   }
 
   getCardSize() {
@@ -1540,7 +1588,16 @@ class SkywatchCard extends HTMLElement {
     if (this._ticker || !this._config) return;
     // Dead reckoning only needs a couple of frames a second at walking pace;
     // two seconds keeps the map alive without waking the tab constantly.
-    this._ticker = window.setInterval(() => this._refresh(false), 2000);
+    // Nothing catches a throw from a timer, so it would repeat every two
+    // seconds forever with only the console to show for it.
+    this._ticker = window.setInterval(() => {
+      try {
+        this._refresh(false);
+      } catch (err) {
+        console.error("skywatch-card: could not move the aircraft on", err);
+        this._built = false;
+      }
+    }, 2000);
   }
 
   _stopTicker() {
@@ -1783,6 +1840,10 @@ class SkywatchCard extends HTMLElement {
   }
 
   _render() {
+    // The popup's close and select handlers come straight here, and one of
+    // them fires from `disconnectedCallback`, by which point there is no card
+    // left to draw into. `_refresh` guards; these have to as well.
+    if (!this._built || !this._hass) return;
     const config = this._config;
     const ctx = this._context();
     const t = ctx.t;
@@ -2197,14 +2258,6 @@ const LIST_CSS = `
   .row .f-eye { color: var(--accent, #7cc4ff); }
   .row .f-ear { color: var(--secondary-text-color); }
 `;
-
-/* The integration loads this module for you, and someone upgrading from the
- * card-only days will still have a Lovelace resource pointing at their own
- * copy. Defining a name twice throws and takes the rest of the module down
- * with it, so whoever gets there first wins and the second load is a no-op. */
-if (!customElements.get("skywatch-card")) {
-  customElements.define("skywatch-card", SkywatchCard);
-}
 
 /* ------------------------------------------------------------- the popup */
 
@@ -2757,6 +2810,20 @@ if (!customElements.get("skywatch-card-editor")) {
   customElements.define("skywatch-card-editor", SkywatchCardEditor);
 }
 
+/* The card is registered last, after the popup and the editor it reaches for.
+ * Registering it is what makes Home Assistant start using it, and a module
+ * that stops halfway -- a truncated response on a flaky mobile connection is
+ * the realistic way -- would otherwise leave a card whose popup does not
+ * exist. Nothing here is constructible until all of its parts are.
+ *
+ * The integration loads this module for you, and someone upgrading from the
+ * card-only days will still have a Lovelace resource pointing at their own
+ * copy. Defining a name twice throws and takes the rest of the module down
+ * with it, so whoever gets there first wins and the second load is a no-op. */
+if (!customElements.get("skywatch-card")) {
+  customElements.define("skywatch-card", SkywatchCard);
+}
+
 /* ------------------------------------------------------------ card picker */
 
 window.customCards = window.customCards || [];
@@ -2769,13 +2836,19 @@ if (!window.customCards.some((card) => card.type === "skywatch-card")) {
     description:
       "Flightradar24, filtered by what you can actually see and hear from your garden, on a sky dome.",
   });
-
-  console.info(
-    `%c SKYWATCH-CARD %c ${CARD_VERSION} `,
-    "background:#101014;color:#fff;border-radius:3px 0 0 3px;padding:1px 4px",
-    "background:#7cc4ff;color:#101014;border-radius:0 3px 3px 0;padding:1px 4px",
-  );
 }
+
+/* Outside the guard above, deliberately. A leftover Lovelace resource from the
+ * card-only days loads a second copy of this file, and whichever copy is
+ * parsed first is the one that registers -- so the version the integration
+ * ships can be sitting in the browser doing nothing while an old one draws the
+ * dashboard. Every copy saying its version is the only way to see that. */
+console.info(
+  `%c SKYWATCH-CARD %c ${CARD_VERSION} %c${customElements.get("skywatch-card") === SkywatchCard ? "" : " (not in use: another copy registered first)"}`,
+  "background:#101014;color:#fff;border-radius:3px 0 0 3px;padding:1px 4px",
+  "background:#7cc4ff;color:#101014;border-radius:0 3px 3px 0;padding:1px 4px",
+  "color:#d08770",
+);
 
 /* --------------------------------------------------------------- exports */
 

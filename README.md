@@ -350,32 +350,57 @@ resize listener.
 ## When the card says "Configuration error"
 
 Home Assistant puts a grey tile reading *Configuration error* where the card
-should be, and the line under it says which of two quite different things
-happened.
+should be. On a normal dashboard that tile says nothing else: Home Assistant
+prints the reason only in the card editor's preview, so several unrelated
+problems all look identical from the outside. Two places have the reason:
 
-**"Custom element doesn't exist: skywatch-card."** The card's JavaScript had
-not registered by the time the dashboard drew itself. Home Assistant allows two
-seconds and then shows this, so it is a loading problem and not a configuration
-one — which is why it comes and goes, and why it often rights itself a moment
-later or on the next visit. Worth checking, in order:
+- **The browser console.** Home Assistant logs the card type and the error
+  before it swaps the tile in, and the card logs its own version on every load.
+- **The dashboard editor.** Open it and look at the card's preview; the line
+  under the tile is filled in there.
 
-- A **hard refresh** (Ctrl+Shift+R; in the companion app, clear the frontend
-  cache from the app's settings). A browser holding a half-loaded or stale copy
-  of the module is the usual reason.
-- **The integration is actually loaded.** The card is served by the integration
-  itself, so with the entry removed or failing to start there is nothing at
-  `/skywatch/skywatch-card.js`. Opening that URL directly should return
-  JavaScript, not a 404.
-- **A second copy from an older install.** A leftover Resources entry pointing
-  at `/hacsfiles/` or `/local/` loads a different version of the same card; see
-  *Upgrading from the card-only version* above.
+It is almost never the configuration. In order of how often it is the answer:
 
-**Anything else on that line** is the card refusing the configuration, and the
-message names what it tripped over. The card is deliberately forgiving about
-how `entities` is written — one sensor or a list, ids or rows — so this
-normally means a genuine typo in the YAML.
+**The dashboard was opened while Home Assistant was still starting.** The card
+is delivered by a line written into the dashboard's HTML at the moment the page
+is served, and Skywatch adds that line when the integration sets up — a while
+after the web server starts answering. A page served in between never fetches
+the card at all, and stays broken until it is reloaded. The companion app
+reloads the dashboard by itself when it reconnects after a restart, which is
+exactly the wrong moment, and is why this turns up as *sometimes*. **Reload the
+page once** and it is gone until the next restart.
 
-Neither of these is the integration failing. That shows up under Settings →
+**The card was still loading.** Home Assistant allows two seconds for a custom
+card to register and then shows the tile, replacing it with the real card a
+moment later — a grey flash rather than a grey tile. Most likely on the first
+load after an update, when the file is fetched fresh rather than from the
+browser cache, on a slow connection or an older phone.
+
+**A second copy from an older install.** A leftover Resources entry pointing at
+`/hacsfiles/` or `/local/` loads a different version of the same card, and
+whichever is parsed first is the one that runs — so an old copy can quietly
+keep drawing your dashboard no matter what the integration ships. The console
+line says which version is in use and marks any copy that lost; see *Upgrading
+from the card-only version* above.
+
+**No working config entry.** The card is served by the integration, so with the
+entry removed — or stuck retrying — there is nothing at
+`/skywatch/skywatch-card.js` after the next restart. Opening that URL directly
+should return JavaScript, not a 404.
+
+**A genuine mistake in the YAML.** The card is deliberately forgiving about how
+`entities` is written — one sensor or a list, ids or rows — so this is rare,
+and it is the one case that shows the same tile every time you reload rather
+than coming and going.
+
+What no longer causes it: the card failing to draw. Up to 1.1.0 anything that
+went wrong while rendering — a feed row shaped unexpectedly, a browser missing
+something — was reported as a configuration error, and because Home Assistant
+throws the card away rather than retrying, the dashboard stayed broken until
+the page was reloaded. From 1.1.1 that is logged to the console and retried on
+the next update.
+
+None of these is the integration failing. That shows up under Settings →
 Devices & services instead, usually as *Retrying setup* while Flightradar24 is
 refusing requests; the poll interval stretches by itself until it stops.
 
@@ -393,6 +418,7 @@ custom_components/skywatch/
 ```
 node --test test/model.test.mjs test/contract.test.mjs   # the card
 python3 -m unittest discover -s test -p 'test_*.py'      # the feed client
+node test/floor.mjs custom_components/skywatch/frontend/skywatch-card.js
 ```
 
 Two things here cannot be eyeballed. The geometry and the sound model decide
@@ -408,6 +434,11 @@ popup. `test/fixtures/sensor.json` is exactly what the sensor puts in front of
 the card, and both sides are pinned to it — the Python tests assert the client
 still produces it, `test/contract.test.mjs` asserts the card still reads it,
 units included.
+
+`test/floor.mjs` covers the last thing that fails without a symptom: syntax the
+CI parser accepts at ES2018 but the Chrome 61 floor cannot parse. Three of the
+five are regular expression literals, which no grep can tell apart from a URL,
+and any of them is a parse error that stops the card registering at all.
 
 `test/preview.html` renders the card against a fixed set of flights without a
 Home Assistant: one cruising overhead, one climbing out of Schiphol that you

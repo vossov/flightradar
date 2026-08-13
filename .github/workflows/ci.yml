@@ -65,11 +65,34 @@ jobs:
       - name: Parse as ES2018
         run: npx --yes acorn@8 --ecma2018 --module --silent "$CARD"
 
+      # ES2018 is not Chrome 61. Five constructs sit in the gap, three of them
+      # regular expression literals that a grep cannot tell from a URL.
+      - name: Reject syntax above the Chrome 61 floor
+        run: |
+          npm install --no-save --silent acorn@8
+          node test/floor.mjs "$CARD"
+
+      # Nothing above parses differently; these all read fine and then throw
+      # when called. The call that matters is the one Home Assistant makes on
+      # every state update, which is why a missing built-in shows up as a
+      # configuration error rather than as a missing feature.
+      - name: Reject built-ins the floor does not have
+        run: |
+          if grep -nE '\.(flat|flatMap|matchAll|trimStart|trimEnd|replaceAll|at)\(|Object\.(fromEntries|hasOwn)|globalThis|structuredClone|\.finally\(' "$CARD"; then
+            echo "::error::That built-in arrived after Chrome 61 and throws on the"
+            echo "::error::WebViews the companion app still runs. Spell it out instead."
+            exit 1
+          fi
+
+      # The property has to be caught wherever it is written, and this file's
+      # CSS is mostly one rule per line -- anchoring to the start of the line
+      # would have missed every one of them.
       - name: Reject CSS that older WebViews drop
         run: |
-          if grep -nE '^[[:space:]]*(inset|gap|row-gap|column-gap):' "$CARD"; then
+          if grep -nE '(^|[{;])[[:space:]]*(inset|inset-block|inset-inline|gap|row-gap|column-gap):' "$CARD"; then
             echo "::error::inset needs Chrome 87 and flexbox gap needs Chrome 84."
             echo "::error::Use longhand offsets and adjacent-sibling margins instead."
+            echo "::error::grid-gap is the spelling the floor understands."
             exit 1
           fi
 

@@ -1,2 +1,7 @@
 __pycache__/
 *.py[cod]
+
+# `test/floor.mjs` needs acorn, which CI installs with --no-save. The card
+# itself has no dependencies and there is nothing here to lock.
+node_modules/
+package-lock.json
