@@ -18,6 +18,10 @@ globalThis.HTMLElement = class {
     return this.shadowRoot;
   }
 };
+// Deliberately no `document`. Building the card is the first thing that
+// reaches for one, so anything that builds throws here -- which is exactly the
+// shape of the failure the card has to survive without calling it a
+// configuration error.
 // Keep what the card registers: setConfig is the other half of the seam, and
 // the class itself is not exported.
 const defined = {};
@@ -99,6 +103,14 @@ test("an airport is written out from whichever of the two fields arrived", () =>
   assert.equal(placeName({ name: "", city: "Faro" }), "Faro", "no name yet");
   assert.equal(placeName({ name: "Kastrup", city: "" }), "Kastrup", "no city");
   assert.equal(placeName({ name: "", city: "" }), "", "no detail at all");
+  assert.equal(placeName({}), "", "neither field present");
+
+  // The card reads any sensor publishing `flights`, including the other
+  // Flightradar24 integration and hand-written template sensors, so neither
+  // field is guaranteed to be a string. `toLowerCase` on a number would take
+  // the whole card down from inside the popup.
+  assert.equal(placeName({ name: 4, city: "Amsterdam" }), "Amsterdam 4");
+  assert.equal(placeName({ name: "Kastrup", city: 7 }), "7 Kastrup");
 });
 
 test("the units the integration sends are the units the card assumes", () => {
@@ -151,4 +163,53 @@ test("the card accepts every shape an entity list gets written in", () => {
   assert.deepEqual(entitiesFor(null), [], "cleared by the editor");
   assert.deepEqual(entitiesFor([null, "", "sensor.a"]), ["sensor.a"], "holes");
   assert.deepEqual(entitiesFor(undefined), [], "never set: every sensor is used");
+});
+
+/*
+ * The one that matters, and the one the first attempt at this missed.
+ *
+ * Home Assistant sets the config before it sets `hass`, so `setConfig` runs
+ * with no state and never builds anything -- the try/catch it carries is not
+ * on the path a real card takes. The build happens on the first `hass`
+ * assignment, and Home Assistant wraps that: anything escaping it swaps the
+ * card for the grey "Configuration error" tile, which has no `hass` property
+ * of its own, so the dashboard stays broken until the page is reloaded.
+ *
+ * There is no `document` in this file, so building throws. That stands in for
+ * every real reason it might -- a feed row shaped wrongly, a browser missing
+ * something the code assumed -- none of which is a configuration problem.
+ */
+test("a card that cannot render is not a configuration error", () => {
+  const card = new defined["skywatch-card"]();
+  card.setConfig({ type: "custom:skywatch-card", entities: ["sensor.a"] });
+
+  const hass = { states: {}, config: { latitude: 52.3, longitude: 4.7 }, language: "en" };
+  assert.doesNotThrow(() => {
+    card.hass = hass;
+  }, "the first state update, which is where the card is really built");
+  assert.doesNotThrow(() => {
+    card.hass = hass;
+  }, "and every one after it");
+
+  // Left unbuilt on purpose, so the next update starts over rather than
+  // drawing into half a card.
+  assert.equal(card._built, false);
+  // The state is kept even though the render failed: a failed frame must not
+  // also cost the card the newest thing it was given.
+  assert.equal(card._hass, hass);
+});
+
+/*
+ * `flights` is a list from an upstream feed by way of an attribute this repo
+ * does not always own. A hole in it is a row that is not there, not a reason
+ * to take the card down -- and reaching `raw.latitude` through a null does
+ * exactly that, from inside the `hass` setter.
+ */
+test("a hole in the flight list is skipped, not fatal", () => {
+  const [good] = extractFlights({ attributes: sensor.attributes });
+
+  for (const hole of [null, undefined, "PH-BXA", 42, true]) {
+    assert.equal(evaluateFlight(hole, ctx), null, `${JSON.stringify(hole)} is not a flight`);
+  }
+  assert.ok(evaluateFlight(good, ctx), "and a real row still evaluates");
 });
