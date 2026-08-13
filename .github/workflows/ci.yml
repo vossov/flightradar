@@ -30,8 +30,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # ruff is pinned because its default rule set grows between releases, and
+      # an unpinned linter turns a red build into something the change under
+      # test did not cause -- which is how the version gate came to be reported
+      # as failing on a pull request that had bumped it correctly. Raising this
+      # is a deliberate act with its own diff.
       - name: Install
-        run: pip install aiohttp ruff
+        run: pip install aiohttp 'ruff==0.16.2'
       - name: Lint
         run: ruff check custom_components/skywatch test/test_feed.py
       - name: Test the client
