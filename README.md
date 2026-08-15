@@ -435,10 +435,15 @@ the card, and both sides are pinned to it — the Python tests assert the client
 still produces it, `test/contract.test.mjs` asserts the card still reads it,
 units included.
 
-`test/floor.mjs` covers the last thing that fails without a symptom: syntax the
-CI parser accepts at ES2018 but the Chrome 61 floor cannot parse. Three of the
-five are regular expression literals, which no grep can tell apart from a URL,
-and any of them is a parse error that stops the card registering at all.
+`test/floor.mjs` covers the last thing that fails without a symptom: the card is
+parsed directly by browsers, and the floor is Chrome 61. It reads the syntax
+tree for anything above it — the parse itself, the five constructs ES2018 allows
+and Chrome 61 cannot, built-ins that parse fine and throw when called, and CSS
+that older WebViews drop silently. Three of the five are regular expression
+literals, which no grep can tell apart from a URL, and any of them is a parse
+error that stops the card registering at all. It checks itself against
+known-bad and known-good snippets before it will pass the card, and the release
+workflow runs the same command CI does.
 
 `test/preview.html` renders the card against a fixed set of flights without a
 Home Assistant: one cruising overhead, one climbing out of Schiphol that you
