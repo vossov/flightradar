@@ -47,7 +47,7 @@ test/
   model.test.mjs     the visibility and loudness maths
   contract.test.mjs  the card's side of the sensor contract
   test_feed.py       the feed client
-  floor.mjs          syntax ES2018 allows and Chrome 61 cannot parse
+  floor.mjs          the whole Chrome 61 floor: parse, syntax, built-ins, CSS
   fixtures/          what the sensor puts in front of the card
   preview.html       the card against fixed flights, no Home Assistant
 ```
@@ -57,9 +57,16 @@ test/
 ```
 node --test test/model.test.mjs test/contract.test.mjs
 python3 -m unittest discover -s test -p 'test_*.py'
+npm install --no-save --silent acorn@8
 node test/floor.mjs custom_components/skywatch/frontend/skywatch-card.js
 ruff check custom_components/skywatch test/test_feed.py
 ```
+
+acorn is the only dependency anything here has. It is not committed — there is
+no `package.json` and `node_modules` is ignored — so a fresh clone installs it
+with `--no-save`, which is what both workflows do before running the floor
+check. Without it `node test/floor.mjs` exits 1 with `ERR_MODULE_NOT_FOUND`; it
+cannot pass by accident.
 
 CI pins ruff. Its default rule set grows between releases, and an unpinned one
 fails a build for something the change under test did not do — which is how a
@@ -130,18 +137,27 @@ It covers four things:
 
 - **The parse**, at ES2018, which is what rejects `?.` and `??` (Chrome 80),
   class fields, private names and logical assignment.
-- **The five constructs in the gap** between ES2018 and Chrome 61 — async
-  generators, `for await`, and regex `dotAll`, lookbehind and named capture
-  groups. The regex three are validated while parsing, so one of them kills the
-  module exactly like `?.` does, with CI green.
-- **Built-ins**, which parse fine and throw when called: `flat`, `flatMap`,
-  `matchAll`, `replaceAll`, `Object.fromEntries` and the rest are Chrome 69 or
-  later, and the call that matters lands in the `hass` setter. `padStart` (57)
-  and `grid-gap` (57) are on the right side of the floor; `gap` and
-  `ResizeObserver` are not, and the latter is used only behind a check.
-- **CSS in the template literals**, matching the property after a `{` or a `;`
-  as well as at the start of a line, because this file's CSS is mostly one rule
-  per line.
+- **The seven constructs in the gap** between ES2018 and Chrome 61 — async
+  generators, `for await`, the template literal revision, and regex `dotAll`,
+  lookbehind, named capture groups and unicode property escapes. The regex four
+  are validated while parsing, so one of them kills the module exactly like
+  `?.` does, with CI green.
+- **Built-ins**, which parse fine and throw when called: `flat`, `matchAll`,
+  `replaceAll`, `findLast`, `Object.fromEntries`, `toggleAttribute`, the newer
+  `Intl` constructors and the rest, all Chrome 63 or later, and the call that
+  matters lands in the `hass` setter. Flagged only in call position, because a
+  field named `at` is not `Array.prototype.at`. `padStart` (57) and `grid-gap`
+  (57) are on the right side of the floor; `ResizeObserver` (64) is not, and is
+  used only behind a check.
+- **CSS**, in template literals and plain strings and through the CSSOM,
+  matching the property after a `{`, a `;` or the quote that opens a `style="`
+  attribute, as well as at the start of a line — this file's CSS is mostly one
+  rule per line and its inline styles carry a single declaration. Comments are
+  blanked first, so a note explaining why `gap:` is avoided is not read as
+  using it. Beyond `gap` and `inset`: `aspect-ratio` (88), `clamp()`/`min()`/
+  `max()` (79) and `:is()` (88), which take the whole declaration or the whole
+  rule down with them. `backdrop-filter` (76) is deliberately absent — Chrome
+  61 renders no blur and nothing else moves.
 
 Two things about it are deliberate. It **self-tests first**: known-bad snippets
 that must be caught and known-good ones that must not, checked before it will

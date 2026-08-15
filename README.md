@@ -340,9 +340,10 @@ Home Assistant companion app runs on.
 That rules out a few things that are otherwise ordinary: optional chaining and
 `??` (Chrome 80) are a *parse* error, which kills the whole module and stops
 the custom element from ever registering; flexbox `gap` (Chrome 84) and the
-`inset` shorthand (Chrome 87) are silently dropped and wreck the layout. CI
-parses the file at ES2018 and greps for those properties on every push, because
-a rendering test in a current headless Chrome cannot catch any of it.
+`inset` shorthand (Chrome 87) are silently dropped and wreck the layout. On
+every push CI parses the file at ES2018 and reads its syntax tree for those
+properties — `test/floor.mjs`, which the release workflow runs too — because a
+rendering test in a current headless Chrome cannot catch any of it.
 
 `ResizeObserver` (Chrome 64) is used where available and falls back to a window
 resize listener.
@@ -418,6 +419,7 @@ custom_components/skywatch/
 ```
 node --test test/model.test.mjs test/contract.test.mjs   # the card
 python3 -m unittest discover -s test -p 'test_*.py'      # the feed client
+npm install --no-save --silent acorn@8                   # the floor check's one dependency
 node test/floor.mjs custom_components/skywatch/frontend/skywatch-card.js
 ```
 
