@@ -340,9 +340,10 @@ Home Assistant companion app runs on.
 That rules out a few things that are otherwise ordinary: optional chaining and
 `??` (Chrome 80) are a *parse* error, which kills the whole module and stops
 the custom element from ever registering; flexbox `gap` (Chrome 84) and the
-`inset` shorthand (Chrome 87) are silently dropped and wreck the layout. CI
-parses the file at ES2018 and greps for those properties on every push, because
-a rendering test in a current headless Chrome cannot catch any of it.
+`inset` shorthand (Chrome 87) are silently dropped and wreck the layout. On
+every push CI parses the file at ES2018 and reads its syntax tree for those
+properties — `test/floor.mjs`, which the release workflow runs too — because a
+rendering test in a current headless Chrome cannot catch any of it.
 
 `ResizeObserver` (Chrome 64) is used where available and falls back to a window
 resize listener.
@@ -418,6 +419,7 @@ custom_components/skywatch/
 ```
 node --test test/model.test.mjs test/contract.test.mjs   # the card
 python3 -m unittest discover -s test -p 'test_*.py'      # the feed client
+npm install --no-save --silent acorn@8                   # the floor check's one dependency
 node test/floor.mjs custom_components/skywatch/frontend/skywatch-card.js
 ```
 
@@ -435,10 +437,15 @@ the card, and both sides are pinned to it — the Python tests assert the client
 still produces it, `test/contract.test.mjs` asserts the card still reads it,
 units included.
 
-`test/floor.mjs` covers the last thing that fails without a symptom: syntax the
-CI parser accepts at ES2018 but the Chrome 61 floor cannot parse. Three of the
-five are regular expression literals, which no grep can tell apart from a URL,
-and any of them is a parse error that stops the card registering at all.
+`test/floor.mjs` covers the last thing that fails without a symptom: the card is
+parsed directly by browsers, and the floor is Chrome 61. It reads the syntax
+tree for anything above it — the parse itself, the five constructs ES2018 allows
+and Chrome 61 cannot, built-ins that parse fine and throw when called, and CSS
+that older WebViews drop silently. Three of the five are regular expression
+literals, which no grep can tell apart from a URL, and any of them is a parse
+error that stops the card registering at all. It checks itself against
+known-bad and known-good snippets before it will pass the card, and the release
+workflow runs the same command CI does.
 
 `test/preview.html` renders the card against a fixed set of flights without a
 Home Assistant: one cruising overhead, one climbing out of Schiphol that you

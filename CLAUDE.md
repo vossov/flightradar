@@ -47,7 +47,7 @@ test/
   model.test.mjs     the visibility and loudness maths
   contract.test.mjs  the card's side of the sensor contract
   test_feed.py       the feed client
-  floor.mjs          syntax ES2018 allows and Chrome 61 cannot parse
+  floor.mjs          the whole Chrome 61 floor: parse, syntax, built-ins, CSS
   fixtures/          what the sensor puts in front of the card
   preview.html       the card against fixed flights, no Home Assistant
 ```
@@ -57,9 +57,16 @@ test/
 ```
 node --test test/model.test.mjs test/contract.test.mjs
 python3 -m unittest discover -s test -p 'test_*.py'
+npm install --no-save --silent acorn@8
 node test/floor.mjs custom_components/skywatch/frontend/skywatch-card.js
 ruff check custom_components/skywatch test/test_feed.py
 ```
+
+acorn is the only dependency anything here has. It is not committed — there is
+no `package.json` and `node_modules` is ignored — so a fresh clone installs it
+with `--no-save`, which is what both workflows do before running the floor
+check. Without it `node test/floor.mjs` exits 1 with `ERR_MODULE_NOT_FOUND`; it
+cannot pass by accident.
 
 CI pins ruff. Its default rule set grows between releases, and an unpinned one
 fails a build for something the change under test did not do — which is how a
@@ -123,23 +130,41 @@ The floor is **Chrome 61**.
 - Flexbox `gap` (84) and the `inset` shorthand (87) are dropped silently and
   wreck the layout. Use longhand offsets and adjacent-sibling margins.
 
-CI parses at ES2018 and greps for those properties. A rendering test in a
-current headless Chrome cannot catch any of it.
+`test/floor.mjs` is the whole guard, and it reads the syntax tree rather than
+the characters. A rendering test in a current headless Chrome catches none of
+this, and a grep cannot tell a regex literal from a URL, or CSS from prose.
+It covers four things:
 
-ES2018 is not Chrome 61, so the parse is not the whole guard:
+- **The parse**, at ES2018, which is what rejects `?.` and `??` (Chrome 80),
+  class fields, private names and logical assignment.
+- **The seven constructs in the gap** between ES2018 and Chrome 61 — async
+  generators, `for await`, the template literal revision, and regex `dotAll`,
+  lookbehind, named capture groups and unicode property escapes. The regex four
+  are validated while parsing, so one of them kills the module exactly like
+  `?.` does, with CI green.
+- **Built-ins**, which parse fine and throw when called: `flat`, `matchAll`,
+  `replaceAll`, `findLast`, `Object.fromEntries`, `toggleAttribute`, the newer
+  `Intl` constructors and the rest, all Chrome 63 or later, and the call that
+  matters lands in the `hass` setter. Flagged only in call position, because a
+  field named `at` is not `Array.prototype.at`. `padStart` (57) and `grid-gap`
+  (57) are on the right side of the floor; `ResizeObserver` (64) is not, and is
+  used only behind a check.
+- **CSS**, in template literals and plain strings and through the CSSOM,
+  matching the property after a `{`, a `;` or the quote that opens a `style="`
+  attribute, as well as at the start of a line — this file's CSS is mostly one
+  rule per line and its inline styles carry a single declaration. Comments are
+  blanked first, so a note explaining why `gap:` is avoided is not read as
+  using it. Beyond `gap` and `inset`: `aspect-ratio` (88), `clamp()`/`min()`/
+  `max()` (79) and `:is()` (88), which take the whole declaration or the whole
+  rule down with them. `backdrop-filter` (76) is deliberately absent — Chrome
+  61 renders no blur and nothing else moves.
 
-- Five constructs sit in the gap — async generators, `for await`, and regex
-  `dotAll`, lookbehind and named capture groups. The three regex ones are
-  validated while parsing, so one of them kills the module exactly like `?.`
-  does. `test/floor.mjs` walks the AST for them, because a grep cannot tell a
-  regex literal from a URL.
-- Built-ins parse fine and throw when called — `flat`, `flatMap`, `matchAll`,
-  `replaceAll`, `Object.fromEntries` and the rest are all Chrome 69 or later.
-  CI greps for them. `padStart` (57) and `grid-gap` (57) are on the right side
-  of the floor; `gap` and `ResizeObserver` are not, and the latter is used only
-  behind a check.
-- The CSS grep matches the property after a `{` or a `;` as well as at the
-  start of a line, because this file's CSS is mostly one rule per line.
+Two things about it are deliberate. It **self-tests first**: known-bad snippets
+that must be caught and known-good ones that must not, checked before it will
+say anything about the card, because a guard that has quietly stopped guarding
+is worse than none. And **both CI and the release workflow run the same
+command** — the release gate had already fallen a parse behind CI by keeping
+its own copy of the rules.
 
 ## Flightradar24
 

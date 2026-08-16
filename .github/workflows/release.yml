@@ -27,9 +27,13 @@ jobs:
           python-version: "3.12"
 
       # Never publish a tag that would not load in the browsers the card claims
-      # to support.
-      - name: Parse as ES2018
-        run: npx --yes acorn@8 --ecma2018 --module --silent "$CARD"
+      # to support. The same command CI runs, deliberately: a release gate that
+      # checks less than CI is one that has stopped being a gate, and this one
+      # had quietly fallen a parse behind.
+      - name: Check the Chrome 61 floor
+        run: |
+          npm install --no-save --silent acorn@8
+          node test/floor.mjs "$CARD"
 
       - name: Test the model
         run: node --test test/model.test.mjs test/contract.test.mjs
