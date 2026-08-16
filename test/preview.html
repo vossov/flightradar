@@ -4,7 +4,8 @@
   Open it in a browser (or point Playwright at it) and you get the card, the
   full layout and the popup against a fixed set of flights: one cruising
   overhead, one climbing out of Schiphol that you can only hear, a helicopter
-  low to the east, and traffic on the taxiway that should be filtered out.
+  low to the east, one inbound with nothing but its two airport codes, and
+  traffic on the taxiway that should be filtered out.
 
       python3 -m http.server -d . 8080   ->   localhost:8080/test/preview.html
 -->
@@ -23,8 +24,15 @@
         --primary-text-color: #212121;
         --secondary-text-color: #6b7280;
         --card-background-color: #fff;
-        --success-color: #2e7d32;
-        --warning-color: #b26a00;
+        /* Home Assistant's own defaults, not readable stand-ins for them.
+           These are accent colours meant for an icon on the card background,
+           and the preview quietly carried darker values than the real thing
+           for long enough that amber-on-amber verdict text looked fine here
+           and was unreadable on a phone. */
+        --success-color: #4caf50;
+        --warning-color: #ffa726;
+        --error-color: #db4437;
+        --accent-color: #ff9800;
       }
       .stack { max-width: 460px; margin: 0 auto; }
       .stack > * { display: block; margin-bottom: 20px; }
@@ -140,12 +148,12 @@
           heading: 290,
           ground_speed: 400,
           vertical_speed: -1800,
-          airport_origin_code_iata: "LHR",
-          airport_origin_city: "London",
-          airport_origin_name: "Heathrow Airport",
+          // Deliberately nothing but the two codes: the detail lookup has
+          // not come back, which is the ordinary state of a good share of
+          // flights. The popup should still name both cities, from the table
+          // in the card rather than from here.
+          airport_origin_code_iata: "NUE",
           airport_destination_code_iata: "AMS",
-          airport_destination_city: "Amsterdam",
-          airport_destination_name: "Amsterdam Schiphol Airport",
         },
         {
           id: "5",
