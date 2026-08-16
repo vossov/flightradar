@@ -159,7 +159,20 @@ It covers four things:
   rule down with them. `backdrop-filter` (76) is deliberately absent — Chrome
   61 renders no blur and nothing else moves.
 
-Two things about it are deliberate. It **self-tests first**: known-bad snippets
+One thing it cannot check is colour, and there is a trap there of the same
+shape. `--success-color`, `--warning-color` and `--error-color` are Home
+Assistant's *accent* colours — sized for an icon or a badge sitting on the card
+background — and a theme may set them to anything. Used as `color:` on a tinted
+chip of the same hue they produce lettering you can see is there and cannot
+read; Home Assistant's own default warning, `#ffa726` on an 18% amber tint, is
+exactly that, and is how the popup's verdict line shipped for two versions.
+Text is `--primary-text-color`, which the theme guarantees against its own
+background; the hue goes on a border or a dot beside it. Nor can a dark theme
+be branched on — `@media (prefers-color-scheme)` is Chrome 76, and Home
+Assistant's own light/dark switch does not reach it anyway — so whatever is
+chosen has to hold up over both.
+
+Two things about the floor check are deliberate. It **self-tests first**: known-bad snippets
 that must be caught and known-good ones that must not, checked before it will
 say anything about the card, because a guard that has quietly stopped guarding
 is worse than none. And **both CI and the release workflow run the same
@@ -193,8 +206,17 @@ deadline in the frontend. That one self-heals — the tile is hidden for the two
 seconds and swapped back when the element registers — so it shows as a grey
 flash, most likely on the first load after a version bump, when the `?v=`
 change makes the browser fetch the file rather than take it from cache. The
-file is ~92 KB and that is the whole budget; adding to it costs the people on
-the oldest phones first.
+file is ~110 KB, ~39 KB of it over the wire, and that is the whole budget;
+adding to it costs the people on the oldest phones first.
+
+About 16 KB of that — 10 KB gzipped, the single largest thing in the file — is
+`AIRPORT_CITIES`, the table that turns a three-letter code into a city. It
+earns its place because the detail lookup that would otherwise supply the name
+is a second request per flight, capped at twelve a cycle, and the first thing
+Flightradar24 refuses; without the table those flights show `NUE → AMS` and
+nothing else, which does not answer the question the popup exists to answer.
+If the budget ever has to give, trim from the end of the rows and not the
+middle: the famous airports are the ones nobody needed a table for.
 
 ## HACS
 

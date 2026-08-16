@@ -18,7 +18,7 @@
  * as a module resource.
  */
 
-const CARD_VERSION = "1.1.2";
+const CARD_VERSION = "1.2.0";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -1298,6 +1298,283 @@ class MapView {
   }
 }
 
+/* -------------------------------------------------------- airport cities */
+
+/* The feed row carries the two airport codes and nothing else. The city and
+ * the written-out name come from the detail lookup, which is a second request
+ * per flight, is capped per cycle, and is the first thing Flightradar24
+ * refuses -- so a good share of flights reach the card as "NUE -> AMS" and
+ * stay that way. That is not an answer to where it is going. It is a riddle,
+ * and only for the airport you happen not to know.
+ *
+ * So the codes are resolved here too, from the airports with scheduled
+ * passenger traffic. Strictly a fallback: a city the feed sends wins over this
+ * one every time, because it is current and this table is a snapshot.
+ *
+ * Cities, not airports -- the code is already on the line above it, and
+ * "Nuremberg" is the part that was missing. Written the way Flightradar24
+ * writes them, in English and unaccented, so the two sources cannot disagree
+ * in the same popup.
+ *
+ * It is ~900 airports and costs ~16 KB of the file, ~10 KB of them over the
+ * wire, which is a real share of a card that is downloaded again on every
+ * version bump. It buys the popup reading as a sentence without a second
+ * request having to succeed first. The tail is the part worth having: nobody
+ * needs a table to be told that AMS is Amsterdam, and the code you cannot
+ * place is by definition not one of the famous ones. Trim from the bottom of
+ * the rows, never from the middle, if it ever has to give. */
+const AIRPORT_CITIES = (function () {
+  const rows = [
+    // Netherlands, Belgium, Luxembourg
+    `
+    AMS Amsterdam|RTM Rotterdam|EIN Eindhoven|GRQ Groningen|MST Maastricht
+    ENS Enschede|BRU Brussels|CRL Charleroi|ANR Antwerp|LGG Liege|OST Ostend
+    KJK Kortrijk|LUX Luxembourg
+    `,
+    // Germany, Austria, Switzerland
+    `
+    FRA Frankfurt|MUC Munich|DUS Dusseldorf|BER Berlin|HAM Hamburg
+    CGN Cologne|STR Stuttgart|NUE Nuremberg|HAJ Hannover|LEJ Leipzig
+    BRE Bremen|DTM Dortmund|FMO Munster|HHN Frankfurt Hahn|NRN Weeze
+    PAD Paderborn|SCN Saarbrucken|FDH Friedrichshafen|FKB Karlsruhe
+    ERF Erfurt|KSF Kassel|RLG Rostock|GWT Sylt|HDF Heringsdorf|VIE Vienna
+    SZG Salzburg|INN Innsbruck|GRZ Graz|LNZ Linz|KLU Klagenfurt|ZRH Zurich
+    GVA Geneva|BSL Basel|BRN Bern|LUG Lugano|SIR Sion|ACH St Gallen
+    `,
+    // United Kingdom and Ireland
+    `
+    LHR London|LGW London|STN London|LTN London|LCY London|SEN London
+    MAN Manchester|BHX Birmingham|EDI Edinburgh|GLA Glasgow|BRS Bristol
+    NCL Newcastle|LPL Liverpool|LBA Leeds|EMA Nottingham|ABZ Aberdeen
+    BFS Belfast|BHD Belfast|CWL Cardiff|SOU Southampton|EXT Exeter
+    NWI Norwich|INV Inverness|DND Dundee|PIK Glasgow|BOH Bournemouth
+    MME Durham|HUY Humberside|JER Jersey|GCI Guernsey|IOM Isle of Man
+    DUB Dublin|ORK Cork|SNN Shannon|NOC Knock|KIR Kerry
+    `,
+    // France
+    `
+    CDG Paris|ORY Paris|BVA Paris Beauvais|NCE Nice|LYS Lyon|MRS Marseille
+    TLS Toulouse|BOD Bordeaux|NTE Nantes|LIL Lille|MPL Montpellier
+    SXB Strasbourg|MLH Mulhouse|BIQ Biarritz|AJA Ajaccio|BIA Bastia
+    FSC Figari|CLY Calvi|RNS Rennes|BES Brest|PGF Perpignan
+    CFE Clermont-Ferrand|GNB Grenoble|CMF Chambery|LDE Tarbes|PUF Pau
+    EGC Bergerac|LRH La Rochelle|TLN Toulon|NIM Nimes|BZR Beziers
+    CCF Carcassonne|DNR Dinard|LIG Limoges|ETZ Metz|TUF Tours|AVN Avignon
+    QXB Aix-en-Provence|CER Cherbourg|LEH Le Havre|FDF Fort-de-France
+    PTP Pointe-a-Pitre|RUN Saint-Denis|CAY Cayenne
+    `,
+    // Iberia
+    `
+    MAD Madrid|BCN Barcelona|PMI Palma de Mallorca|AGP Malaga|ALC Alicante
+    VLC Valencia|SVQ Seville|BIO Bilbao|IBZ Ibiza|MAH Menorca|LPA Las Palmas
+    TFS Tenerife|TFN Tenerife|ACE Lanzarote|FUE Fuerteventura|SPC La Palma
+    GMZ La Gomera|VDE El Hierro|SCQ Santiago de Compostela|OVD Oviedo
+    SDR Santander|VGO Vigo|LCG A Coruna|ZAZ Zaragoza|GRX Granada|XRY Jerez
+    MJV Murcia|RMU Murcia|REU Reus|GRO Girona|VIT Vitoria|PNA Pamplona
+    EAS San Sebastian|ALM Almeria|MLN Melilla|BJZ Badajoz|VLL Valladolid
+    LEN Leon|SLM Salamanca|LIS Lisbon|OPO Porto|FAO Faro|FNC Madeira
+    PXO Porto Santo|PDL Ponta Delgada|TER Terceira|HOR Horta|GIB Gibraltar
+    `,
+    // Italy, Malta, Greece, Cyprus
+    `
+    FCO Rome|CIA Rome|MXP Milan|LIN Milan|BGY Milan Bergamo|VCE Venice
+    TSF Treviso|NAP Naples|BLQ Bologna|FLR Florence|PSA Pisa|TRN Turin
+    CTA Catania|PMO Palermo|CAG Cagliari|OLB Olbia|AHO Alghero|BRI Bari
+    BDS Brindisi|SUF Lamezia Terme|REG Reggio Calabria|GOA Genoa|VRN Verona
+    TRS Trieste|PEG Perugia|AOI Ancona|PSR Pescara|RMI Rimini|TPS Trapani
+    CIY Comiso|PNL Pantelleria|CUF Cuneo|PMF Parma|BZO Bolzano|MLA Malta
+    ATH Athens|SKG Thessaloniki|HER Heraklion|CHQ Chania|RHO Rhodes|KGS Kos
+    JTR Santorini|JMK Mykonos|CFU Corfu|ZTH Zakynthos|PVK Preveza|KVA Kavala
+    VOL Volos|EFL Kefalonia|SMI Samos|MJT Mytilene|JSI Skiathos|KLX Kalamata
+    AXD Alexandroupolis|LCA Larnaca|PFO Paphos
+    `,
+    // Nordics and the Baltic
+    `
+    CPH Copenhagen|BLL Billund|AAL Aalborg|AAR Aarhus|RNN Bornholm
+    ARN Stockholm|BMA Stockholm|NYO Stockholm|GOT Gothenburg|MMX Malmo
+    LLA Lulea|UME Umea|OSD Ostersund|VBY Visby|KRN Kiruna|OSL Oslo
+    TRF Sandefjord|BGO Bergen|SVG Stavanger|TRD Trondheim|TOS Tromso
+    BOO Bodo|AES Alesund|KRS Kristiansand|EVE Harstad|LYR Svalbard
+    HEL Helsinki|TMP Tampere|TKU Turku|OUL Oulu|RVN Rovaniemi|KTT Kittila
+    IVL Ivalo|MHQ Mariehamn|KEF Reykjavik|RKV Reykjavik|AEY Akureyri
+    FAE Faroe Islands|SFJ Kangerlussuaq|GOH Nuuk|RIX Riga|TLL Tallinn
+    VNO Vilnius|KUN Kaunas|PLQ Palanga
+    `,
+    // Central and eastern Europe
+    `
+    WAW Warsaw|WMI Warsaw|KRK Krakow|GDN Gdansk|WRO Wroclaw|POZ Poznan
+    KTW Katowice|RZE Rzeszow|LUZ Lublin|SZZ Szczecin|BZG Bydgoszcz|LCJ Lodz
+    PRG Prague|BRQ Brno|OSR Ostrava|BTS Bratislava|KSC Kosice|BUD Budapest
+    DEB Debrecen|OTP Bucharest|CLJ Cluj-Napoca|TSR Timisoara|IAS Iasi
+    SBZ Sibiu|CND Constanta|CRA Craiova|SOF Sofia|VAR Varna|BOJ Burgas
+    PDV Plovdiv|BEG Belgrade|INI Nis|ZAG Zagreb|SPU Split|DBV Dubrovnik
+    ZAD Zadar|PUY Pula|RJK Rijeka|OSI Osijek|LJU Ljubljana|SJJ Sarajevo
+    BNX Banja Luka|TZL Tuzla|TGD Podgorica|TIV Tivat|TIA Tirana|SKP Skopje
+    OHD Ohrid|PRN Pristina|KIV Chisinau|KBP Kyiv|IEV Kyiv|LWO Lviv|ODS Odesa
+    MSQ Minsk|SVO Moscow|DME Moscow|VKO Moscow|ZIA Moscow|LED St Petersburg
+    AER Sochi|KZN Kazan|SVX Yekaterinburg|OVB Novosibirsk|KJA Krasnoyarsk
+    VVO Vladivostok|KGD Kaliningrad|EVN Yerevan|TBS Tbilisi|BUS Batumi
+    GYD Baku|TAS Tashkent|ALA Almaty|NQZ Astana|FRU Bishkek|DYU Dushanbe
+    ASB Ashgabat
+    `,
+    // Turkey and the Middle East
+    `
+    IST Istanbul|SAW Istanbul|AYT Antalya|ADB Izmir|ESB Ankara|DLM Dalaman
+    BJV Bodrum|ADA Adana|TZX Trabzon|GZT Gaziantep|KYA Konya|VAN Van
+    DIY Diyarbakir|ASR Kayseri|DNZ Denizli|TLV Tel Aviv|VDA Eilat|AMM Amman
+    AQJ Aqaba|BEY Beirut|DAM Damascus|BGW Baghdad|EBL Erbil|BSR Basra
+    NJF Najaf|IKA Tehran|MHD Mashhad|DXB Dubai|DWC Dubai|AUH Abu Dhabi
+    SHJ Sharjah|RKT Ras Al Khaimah|DOH Doha|KWI Kuwait City|BAH Bahrain
+    MCT Muscat|SLL Salalah|RUH Riyadh|JED Jeddah|DMM Dammam|MED Medina
+    AHB Abha|SAH Sanaa
+    `,
+    // Africa
+    `
+    CMN Casablanca|RAK Marrakesh|AGA Agadir|FEZ Fez|TNG Tangier|NDR Nador
+    OUD Oujda|RBA Rabat|ESU Essaouira|OZZ Ouarzazate|TUN Tunis|MIR Monastir
+    DJE Djerba|NBE Enfidha|SFA Sfax|ALG Algiers|ORN Oran|CZL Constantine
+    AAE Annaba|TLM Tlemcen|TIP Tripoli|BEN Benghazi|CAI Cairo|SPX Cairo
+    HRG Hurghada|SSH Sharm El Sheikh|LXR Luxor|ASW Aswan|RMF Marsa Alam
+    HBE Alexandria|KRT Khartoum|ADD Addis Ababa|NBO Nairobi|MBA Mombasa
+    EBB Entebbe|KGL Kigali|DAR Dar es Salaam|JRO Kilimanjaro|ZNZ Zanzibar
+    MGQ Mogadishu|HGA Hargeisa|JIB Djibouti|ASM Asmara|LOS Lagos|ABV Abuja
+    PHC Port Harcourt|KAN Kano|ACC Accra|ABJ Abidjan|DKR Dakar|LFW Lome
+    COO Cotonou|OUA Ouagadougou|BKO Bamako|CKY Conakry|FNA Freetown
+    ROB Monrovia|BJL Banjul|RAI Praia|SID Sal|DLA Douala|NSI Yaounde
+    LBV Libreville|BZV Brazzaville|FIH Kinshasa|FBM Lubumbashi|LAD Luanda
+    MPM Maputo|BEW Beira|HRE Harare|VFA Victoria Falls|LUN Lusaka
+    LLW Lilongwe|BLZ Blantyre|GBE Gaborone|WDH Windhoek|MSU Maseru
+    JNB Johannesburg|CPT Cape Town|DUR Durban|PLZ Gqeberha|GRJ George
+    ELS East London|MQP Mbombela|MRU Mauritius|SEZ Seychelles
+    TNR Antananarivo|NOS Nosy Be|RRG Rodrigues|HAH Moroni|TMS Sao Tome
+    `,
+    // North America
+    `
+    JFK New York|EWR Newark|LGA New York|HPN White Plains|ISP Islip
+    SWF Newburgh|BOS Boston|PVD Providence|BDL Hartford|MHT Manchester
+    PWM Portland|BGR Bangor|BTV Burlington|ALB Albany|SYR Syracuse
+    ROC Rochester|BUF Buffalo|PHL Philadelphia|ABE Allentown|IAD Washington
+    DCA Washington|BWI Baltimore|RIC Richmond|ORF Norfolk|RDU Raleigh
+    GSO Greensboro|CLT Charlotte|GSP Greenville|CHS Charleston|CAE Columbia
+    MYR Myrtle Beach|SAV Savannah|ATL Atlanta|BHM Birmingham|HSV Huntsville
+    MGM Montgomery|JAN Jackson|MSY New Orleans|BTR Baton Rouge
+    SHV Shreveport|LIT Little Rock|MEM Memphis|BNA Nashville|TYS Knoxville
+    CHA Chattanooga|SDF Louisville|LEX Lexington|CVG Cincinnati|CMH Columbus
+    CLE Cleveland|PIT Pittsburgh|DAY Dayton|IND Indianapolis|DTW Detroit
+    GRR Grand Rapids|ORD Chicago|MDW Chicago|MKE Milwaukee|MSP Minneapolis
+    DSM Des Moines|OMA Omaha|ICT Wichita|MCI Kansas City|STL St Louis
+    OKC Oklahoma City|TUL Tulsa|DFW Dallas|DAL Dallas|IAH Houston
+    HOU Houston|AUS Austin|SAT San Antonio|ELP El Paso|ABQ Albuquerque
+    TUS Tucson|PHX Phoenix|LAS Las Vegas|SLC Salt Lake City|DEN Denver
+    COS Colorado Springs|BOI Boise|GEG Spokane|SEA Seattle|PDX Portland
+    RNO Reno|SMF Sacramento|SFO San Francisco|OAK Oakland|SJC San Jose
+    FAT Fresno|LAX Los Angeles|BUR Burbank|SNA Santa Ana|ONT Ontario
+    SAN San Diego|PSP Palm Springs|ANC Anchorage|FAI Fairbanks|HNL Honolulu
+    OGG Maui|KOA Kona|LIH Kauai|MIA Miami|FLL Fort Lauderdale
+    PBI West Palm Beach|MCO Orlando|TPA Tampa|RSW Fort Myers|SRQ Sarasota
+    JAX Jacksonville|TLH Tallahassee|PNS Pensacola|VPS Destin|YYZ Toronto
+    YTZ Toronto|YHM Hamilton|YUL Montreal|YOW Ottawa|YQB Quebec City
+    YHZ Halifax|YYT St Johns|YWG Winnipeg|YQR Regina|YXE Saskatoon
+    YYC Calgary|YEG Edmonton|YVR Vancouver|YYJ Victoria|YLW Kelowna
+    YXY Whitehorse|YZF Yellowknife|YFB Iqaluit
+    `,
+    // Latin America and the Caribbean
+    `
+    MEX Mexico City|NLU Mexico City|GDL Guadalajara|MTY Monterrey|CUN Cancun
+    SJD Los Cabos|PVR Puerto Vallarta|TIJ Tijuana|MID Merida|CZM Cozumel
+    BJX Leon|QRO Queretaro|OAX Oaxaca|HUX Huatulco|ZIH Ixtapa|ACA Acapulco
+    CUU Chihuahua|CJS Ciudad Juarez|GUA Guatemala City|SAL San Salvador
+    TGU Tegucigalpa|SAP San Pedro Sula|RTB Roatan|MGA Managua|SJO San Jose
+    LIR Liberia|PTY Panama City|BZE Belize City|HAV Havana|VRA Varadero
+    HOG Holguin|SNU Santa Clara|SDQ Santo Domingo|PUJ Punta Cana
+    POP Puerto Plata|STI Santiago|SJU San Juan|STT St Thomas|STX St Croix
+    MBJ Montego Bay|KIN Kingston|NAS Nassau|FPO Freeport|GCM Grand Cayman
+    PLS Providenciales|BGI Bridgetown|AUA Aruba|CUR Curacao|BON Bonaire
+    SXM Sint Maarten|ANU Antigua|SKB St Kitts|SLU St Lucia|GND Grenada
+    SVD St Vincent|DOM Dominica|POS Port of Spain|TAB Tobago
+    PAP Port-au-Prince|BOG Bogota|MDE Medellin|CTG Cartagena|CLO Cali
+    BAQ Barranquilla|SMR Santa Marta|ADZ San Andres|PEI Pereira
+    BGA Bucaramanga|CCS Caracas|UIO Quito|GYE Guayaquil|GPS Galapagos
+    LIM Lima|CUZ Cusco|AQP Arequipa|LPB La Paz|VVI Santa Cruz|ASU Asuncion
+    MVD Montevideo|PDP Punta del Este|EZE Buenos Aires|AEP Buenos Aires
+    COR Cordoba|MDZ Mendoza|BRC Bariloche|USH Ushuaia|IGR Iguazu|SLA Salta
+    SCL Santiago|CJC Calama|PMC Puerto Montt|IPC Easter Island|GRU Sao Paulo
+    CGH Sao Paulo|VCP Campinas|GIG Rio de Janeiro|SDU Rio de Janeiro
+    BSB Brasilia|CNF Belo Horizonte|POA Porto Alegre|CWB Curitiba
+    FLN Florianopolis|REC Recife|SSA Salvador|FOR Fortaleza|NAT Natal
+    MCZ Maceio|BEL Belem|MAO Manaus|VIX Vitoria|GYN Goiania|CGB Cuiaba
+    IGU Foz do Iguacu|GEO Georgetown|PBM Paramaribo
+    `,
+    // South and east Asia
+    `
+    DEL Delhi|BOM Mumbai|BLR Bengaluru|MAA Chennai|HYD Hyderabad|CCU Kolkata
+    COK Kochi|AMD Ahmedabad|PNQ Pune|GOI Goa|GOX Goa|TRV Thiruvananthapuram
+    JAI Jaipur|LKO Lucknow|IXC Chandigarh|ATQ Amritsar|SXR Srinagar
+    GAU Guwahati|BBI Bhubaneswar|VNS Varanasi|IXB Bagdogra|NAG Nagpur
+    IDR Indore|PAT Patna|CMB Colombo|MLE Male|KTM Kathmandu|DAC Dhaka
+    CGP Chittagong|KHI Karachi|LHE Lahore|ISB Islamabad|PEW Peshawar
+    MUX Multan|SKT Sialkot|KBL Kabul|ULN Ulaanbaatar|PEK Beijing|PKX Beijing
+    PVG Shanghai|SHA Shanghai|CAN Guangzhou|SZX Shenzhen|CTU Chengdu
+    TFU Chengdu|CKG Chongqing|XIY Xian|KMG Kunming|HGH Hangzhou|NKG Nanjing
+    WUH Wuhan|TAO Qingdao|XMN Xiamen|CSX Changsha|TSN Tianjin|SYX Sanya
+    HAK Haikou|DLC Dalian|SHE Shenyang|HRB Harbin|URC Urumqi|LHW Lanzhou
+    HKG Hong Kong|MFM Macau|TPE Taipei|TSA Taipei|KHH Kaohsiung|ICN Seoul
+    GMP Seoul|PUS Busan|CJU Jeju|TAE Daegu|NRT Tokyo|HND Tokyo|KIX Osaka
+    ITM Osaka|UKB Kobe|NGO Nagoya|CTS Sapporo|FUK Fukuoka|OKA Okinawa
+    SDJ Sendai|HIJ Hiroshima|KMJ Kumamoto|KOJ Kagoshima|TAK Takamatsu
+    KMQ Komatsu
+    `,
+    // Southeast Asia and Oceania
+    `
+    SIN Singapore|KUL Kuala Lumpur|PEN Penang|LGK Langkawi|JHB Johor Bahru
+    BKI Kota Kinabalu|KCH Kuching|MYY Miri|BWN Bandar Seri Begawan
+    BKK Bangkok|DMK Bangkok|HKT Phuket|CNX Chiang Mai|USM Koh Samui
+    KBV Krabi|UTP Pattaya|HDY Hat Yai|URT Surat Thani|CEI Chiang Rai
+    SGN Ho Chi Minh City|HAN Hanoi|DAD Da Nang|CXR Nha Trang|PQC Phu Quoc
+    HPH Hai Phong|VII Vinh|HUI Hue|PNH Phnom Penh|REP Siem Reap
+    KOS Sihanoukville|VTE Vientiane|LPQ Luang Prabang|RGN Yangon
+    MDL Mandalay|CGK Jakarta|HLP Jakarta|DPS Bali|SUB Surabaya
+    JOG Yogyakarta|SRG Semarang|KNO Medan|PDG Padang|PLM Palembang
+    BPN Balikpapan|UPG Makassar|MDC Manado|BTH Batam|LOP Lombok|DIL Dili
+    MNL Manila|CEB Cebu|DVO Davao|CRK Clark|ILO Iloilo|PPS Puerto Princesa
+    KLO Kalibo|MPH Boracay|SYD Sydney|MEL Melbourne|AVV Melbourne
+    BNE Brisbane|OOL Gold Coast|PER Perth|ADL Adelaide|CBR Canberra
+    HBA Hobart|LST Launceston|DRW Darwin|CNS Cairns|TSV Townsville
+    MCY Sunshine Coast|NTL Newcastle|ASP Alice Springs|AYQ Uluru
+    HTI Hamilton Island|AKL Auckland|CHC Christchurch|WLG Wellington
+    ZQN Queenstown|DUD Dunedin|NSN Nelson|ROT Rotorua|NAN Nadi|SUV Suva
+    PPT Papeete|NOU Noumea|VLI Port Vila|APW Apia|TBU Nukualofa
+    RAR Rarotonga|POM Port Moresby|HIR Honiara|GUM Guam|SPN Saipan
+    `,
+    // A three-letter code, a space, and the city. Anything else is a typo in
+    // the table above and is dropped rather than stored under a bad key.
+  ];
+
+  const table = Object.create(null);
+  // Split on the separator and on the line breaks the rows are written with,
+  // so a row can be laid out for reading without that changing what it means.
+  const entries = rows.join("|").split(/[|\n]/);
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i].trim();
+    // A three-letter code, a space, and the city. Anything else is a typo in
+    // the table above and is dropped rather than stored under a bad key.
+    if (entry.length > 4 && entry.charAt(3) === " ") {
+      table[entry.slice(0, 3)] = entry.slice(4);
+    }
+  }
+  return table;
+})();
+
+/* The city an IATA code stands for, or "" for one the table does not have --
+ * a private strip, a code that has moved, a feed sending something that is not
+ * a code at all. Never an error: the popup simply goes back to showing the
+ * code on its own, which is where it started. */
+function airportCity(iata) {
+  if (iata === null || iata === undefined) return "";
+  const code = String(iata).toUpperCase();
+  return AIRPORT_CITIES[code] || "";
+}
+
 /* ------------------------------------------------------- shared rendering */
 
 function svgIcon(path, size) {
@@ -1305,8 +1582,11 @@ function svgIcon(path, size) {
 }
 
 /* An airport written out: its name, and the city in front of it when the name
- * does not already say it. Empty when the feed gave us neither, which is
- * every flight whose detail lookup has not come back yet.
+ * does not already say it. When the feed gave us neither -- every flight whose
+ * detail lookup has not come back, or was refused -- the code is looked up in
+ * the table above, so the line under it says a place rather than nothing.
+ *
+ * The feed always wins where it has an answer; the table only fills a hole.
  *
  * Both fields are coerced rather than trusted: this card reads whatever
  * publishes a `flights` attribute, including the other Flightradar24
@@ -1315,6 +1595,7 @@ function svgIcon(path, size) {
 function placeName(port) {
   const name = port.name === null || port.name === undefined ? "" : String(port.name);
   const city = port.city === null || port.city === undefined ? "" : String(port.city);
+  if (!name && !city) return airportCity(port.iata);
   if (!name) return city;
   if (!city || name.toLowerCase().indexOf(city.toLowerCase()) !== -1) return name;
   return `${city} ${name}`;
@@ -2579,15 +2860,29 @@ const DIALOG_CSS = `
   }
   .stat b svg { fill: currentColor; vertical-align: -1px; margin-right: 2px; }
 
+  /* The lettering is the theme's own, never --success-color or
+   * --warning-color. Those are meant for an icon sitting on the card
+   * background, and Home Assistant's default warning is #ffa726: amber
+   * letters on an amber tint, which is how "Audible, not visible" came to be
+   * a line you could see was there and could not read. A theme is free to set
+   * them to anything, so no fallback rescues it either.
+   *
+   * The colour moves to the bar down the left, where nothing has to be read
+   * through it, and both halves then hold up in a dark theme as well -- which
+   * cannot be branched on here, @media (prefers-color-scheme) being Chrome 76
+   * and Home Assistant's own switch not reaching it in any case. */
   .verdict {
     font-size: 13px;
     font-weight: 600;
     padding: 9px 12px;
     border-radius: 10px;
+    border-left: 4px solid transparent;
+    padding-left: 10px;
+    color: var(--primary-text-color, #212121);
   }
-  .verdict.ok { background: rgba(76, 175, 80, 0.16); color: var(--success-color, #2e7d32); }
-  .verdict.heard { background: rgba(255, 167, 38, 0.18); color: var(--warning-color, #b26a00); }
-  .verdict.no { background: rgba(127, 127, 127, 0.14); color: var(--secondary-text-color); }
+  .verdict.ok { background: rgba(76, 175, 80, 0.16); border-left-color: #4caf50; }
+  .verdict.heard { background: rgba(255, 167, 38, 0.18); border-left-color: #ffa726; }
+  .verdict.no { background: rgba(127, 127, 127, 0.14); border-left-color: rgba(127, 127, 127, 0.55); }
 
   .sound {
     display: flex;
@@ -2875,6 +3170,8 @@ export {
   formatSeconds,
   compassName,
   placeName,
+  airportCity,
+  AIRPORT_CITIES,
   translator,
   pickLanguage,
   escapeHtml,

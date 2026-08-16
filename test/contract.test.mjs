@@ -33,9 +33,14 @@ globalThis.customElements = {
 };
 globalThis.window = globalThis;
 
-const { DEFAULTS, extractFlights, evaluateFlight, placeName } = await import(
-  "../custom_components/skywatch/frontend/skywatch-card.js"
-);
+const {
+  DEFAULTS,
+  extractFlights,
+  evaluateFlight,
+  placeName,
+  airportCity,
+  AIRPORT_CITIES,
+} = await import("../custom_components/skywatch/frontend/skywatch-card.js");
 
 const sensor = JSON.parse(
   readFileSync(new URL("./fixtures/sensor.json", import.meta.url), "utf8"),
@@ -105,12 +110,77 @@ test("an airport is written out from whichever of the two fields arrived", () =>
   assert.equal(placeName({ name: "", city: "" }), "", "no detail at all");
   assert.equal(placeName({}), "", "neither field present");
 
+  // With neither field the code itself is the last resort, which is the
+  // ordinary case rather than the odd one: the detail lookup is a second
+  // request per flight, capped per cycle, and the first thing to be refused.
+  assert.equal(
+    placeName({ name: "", city: "", iata: "NUE" }),
+    "Nuremberg",
+    "the code resolved when the feed sent no airport at all",
+  );
+  assert.equal(
+    placeName({ name: "", city: "Nurnberg", iata: "NUE" }),
+    "Nurnberg",
+    "a city from the feed is never overruled by the table",
+  );
+  assert.equal(
+    placeName({ name: "Albrecht Durer Airport", city: "", iata: "NUE" }),
+    "Albrecht Durer Airport",
+    "a name from the feed is never overruled by the table",
+  );
+  assert.equal(
+    placeName({ name: "", city: "", iata: "ZZZ" }),
+    "",
+    "a code the table does not have leaves the line empty, as before",
+  );
+
   // The card reads any sensor publishing `flights`, including the other
   // Flightradar24 integration and hand-written template sensors, so neither
   // field is guaranteed to be a string. `toLowerCase` on a number would take
   // the whole card down from inside the popup.
   assert.equal(placeName({ name: 4, city: "Amsterdam" }), "Amsterdam 4");
   assert.equal(placeName({ name: "Kastrup", city: 7 }), "7 Kastrup");
+});
+
+/*
+ * The airport table is written by hand as runs of "XXX City" joined on "|",
+ * and a missing separator or a two-letter code silently swallows its
+ * neighbour -- "AM SAmsterdam" is not a parse error, it is a wrong answer in
+ * the popup. Nothing else in the file would notice, so it is checked here.
+ */
+test("every row of the airport table is a code and a city", () => {
+  assert.equal(airportCity("AMS"), "Amsterdam");
+  assert.equal(airportCity("ams"), "Amsterdam", "case does not matter");
+  assert.equal(airportCity("NUE"), "Nuremberg");
+  assert.equal(airportCity("JFK"), "New York", "a city of more than one word");
+
+  // Nothing to look up is not an error; the popup keeps the code on its own.
+  assert.equal(airportCity(""), "");
+  assert.equal(airportCity(undefined), "");
+  assert.equal(airportCity(null), "");
+  assert.equal(airportCity("ZZZ"), "");
+  assert.equal(airportCity(7), "", "a feed that sent a number, not a code");
+
+  // A row that lost its "|" does not fail to parse -- "AMS Amsterdam RTM
+  // Rotterdam" is a valid-looking entry that stores one wrong city and loses
+  // the other. Every entry is checked rather than sampled, because the ones
+  // worth having in the table are exactly the ones nobody would think to
+  // spot-check.
+  const codes = Object.keys(AIRPORT_CITIES);
+  assert.ok(codes.length > 500, `only ${codes.length} airports in the table`);
+  for (const code of codes) {
+    assert.ok(/^[A-Z]{3}$/.test(code), `${code} is not an IATA code`);
+    const city = AIRPORT_CITIES[code];
+    assert.ok(city.length > 1, `${code} has no city`);
+    assert.equal(city, city.trim(), `${code} is padded: "${city}"`);
+    assert.ok(
+      !/ [A-Z]{3} /.test(` ${city} `),
+      `${code} swallowed the next entry: "${city}"`,
+    );
+    // The line sits under a three-letter code in a column half the popup
+    // wide. A city that long is a run-together, not a place.
+    assert.ok(city.length <= 24, `${code} is too long for the line: "${city}"`);
+  }
 });
 
 test("the units the integration sends are the units the card assumes", () => {
