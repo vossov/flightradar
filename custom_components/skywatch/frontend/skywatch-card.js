@@ -18,7 +18,7 @@
  * as a module resource.
  */
 
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.2.1";
 
 /* ------------------------------------------------------------------ icons */
 
@@ -133,6 +133,9 @@ const STRINGS = {
     faint: "faint",
     clear: "clear",
     loud: "loud",
+    broken: "Skywatch could not draw this card",
+    broken_retry: "It will try again on the next update.",
+    broken_not_config: "This is not a configuration error -- the card is here, this update failed.",
   },
   nl: {
     compass: ["N", "NNO", "NO", "ONO", "O", "OZO", "ZO", "ZZO", "Z", "ZZW", "ZW", "WZW", "W", "WNW", "NW", "NNW"],
@@ -178,6 +181,9 @@ const STRINGS = {
     faint: "zwak",
     clear: "duidelijk",
     loud: "luid",
+    broken: "Skywatch kon deze kaart niet tekenen",
+    broken_retry: "Bij de volgende update wordt het opnieuw geprobeerd.",
+    broken_not_config: "Dit is geen configuratiefout -- de kaart staat er wel, deze update ging mis.",
   },
 };
 
@@ -941,6 +947,10 @@ class MapView {
 
   _observeSize(root) {
     const measure = () => {
+      // A destroyed map still has a `resize` listener and a pending timeout
+      // pointing at it on the WebViews below ResizeObserver, and both would
+      // draw into nodes that are no longer in a document.
+      if (this._destroyed) return;
       const width = root.clientWidth;
       const height = root.clientHeight;
       if (!width || !height) return;
@@ -954,6 +964,11 @@ class MapView {
       this._resizeObserver = new ResizeObserver(measure);
       this._resizeObserver.observe(root);
     } else {
+      // Kept so `destroy` can take it off again. ResizeObserver is Chrome 64
+      // and the floor is 61, so this branch is not hypothetical -- it is the
+      // oldest phones, which are also the ones that can least afford to keep
+      // a dead map and its overlay alive for the rest of the session.
+      this._resizeListener = measure;
       window.addEventListener("resize", measure);
     }
     // The element is usually not laid out yet at construction time.
@@ -968,8 +983,19 @@ class MapView {
     this._draw();
   }
 
+  /* Called on every rebuild, not only on removal -- a dashboard save is
+   * enough -- so anything not given back here is given back never, and is
+   * accumulated once per save for as long as the page is open. */
   destroy() {
-    if (this._resizeObserver) this._resizeObserver.disconnect();
+    this._destroyed = true;
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._resizeListener) {
+      window.removeEventListener("resize", this._resizeListener);
+      this._resizeListener = null;
+    }
   }
 
   setDark(dark) {
@@ -1795,12 +1821,21 @@ class SkywatchCard extends HTMLElement {
     // own root, so drop the references with the nodes. The map has to be told:
     // it is holding a ResizeObserver, or a window resize listener on the older
     // WebViews, that nothing else will take back.
-    if (this._map) {
-      this._map.destroy();
+    //
+    // Tearing the old card down is not the configuration's fault either, and
+    // this runs again on every dashboard save and every config push from
+    // another browser -- so it is inside the guard with the rest. `_map` is
+    // dropped first, so a throw cannot leave a destroyed map attached.
+    try {
+      const map = this._map;
       this._map = null;
+      if (map) map.destroy();
+      this._els = {};
+      this.shadowRoot.innerHTML = "";
+    } catch (err) {
+      console.error("skywatch-card: could not clear the previous card", err);
+      this._els = {};
     }
-    this._els = {};
-    this.shadowRoot.innerHTML = "";
     /* Building reads the live state, so it can fail for reasons that have
      * nothing to do with the configuration. Reporting that as a configuration
      * error sends people to edit YAML that was never wrong; leave the card
@@ -1813,8 +1848,7 @@ class SkywatchCard extends HTMLElement {
       try {
         this._build();
       } catch (err) {
-        console.error("skywatch-card: could not build the card", err);
-        this._built = false;
+        this._fail(err, "could not build the card");
       }
     }
   }
@@ -1843,10 +1877,51 @@ class SkywatchCard extends HTMLElement {
       if (!this._built) this._build();
       this._refresh(true);
     } catch (err) {
-      console.error("skywatch-card: could not update the card", err);
       // `_build` starts by emptying the shadow root, so a rebuild discards a
       // half-built card rather than adding to it.
-      this._built = false;
+      this._fail(err, "could not update the card");
+    }
+  }
+
+  /*
+   * What the user is left looking at when the guard above catches something.
+   *
+   * Emptying the shadow root and stopping -- which is what this did before --
+   * puts a blank rectangle on the dashboard. Home Assistant's own
+   * "Configuration error" tile is *also* a blank rectangle on a normal view,
+   * because the frontend only writes the message under it when `preview` is
+   * true. So the two are indistinguishable by looking, they have nothing in
+   * common as causes, and the one that means "your YAML is wrong" is the one
+   * people reasonably assume. A quiet failure here gets reported as a
+   * configuration error and sends the search to the wrong end of the stack.
+   *
+   * The console has the stack, and nobody holding a phone has a console. So
+   * the card says what happened in its own shadow root instead: its name, its
+   * version, and the message. Deliberately a plain `div` with inline styles --
+   * no `ha-card`, no stylesheet, no translator table lookup that is not
+   * wrapped -- because whatever just failed is not ruled out as the thing this
+   * needs. If even that throws, it is logged and the card goes back to being
+   * blank; a card that cannot say it failed is still not worth taking the
+   * dashboard down for.
+   */
+  _fail(err, where) {
+    console.error(`skywatch-card: ${where}`, err);
+    this._built = false;
+    try {
+      const t = translator(pickLanguage(this._config && this._config.language, this._hass));
+      const message = err && err.message ? String(err.message) : String(err);
+      this.shadowRoot.innerHTML =
+        `<div style="padding:14px 16px;border-radius:12px;border-left:4px solid #ffa726;` +
+        `background:rgba(255,167,38,0.14);color:var(--primary-text-color,#212121);` +
+        `font-size:13px;line-height:1.45">` +
+        `<b>${escapeHtml(t("broken"))}</b><br>` +
+        `<span style="color:var(--secondary-text-color,#6b7280)">${escapeHtml(t("broken_retry"))} ` +
+        `${escapeHtml(t("broken_not_config"))}</span><br>` +
+        `<code style="font-size:11px;word-break:break-word">` +
+        `v${escapeHtml(CARD_VERSION)} &middot; ${escapeHtml(message)}</code>` +
+        `</div>`;
+    } catch (nested) {
+      console.error("skywatch-card: could not report that failure either", nested);
     }
   }
 
@@ -1859,10 +1934,18 @@ class SkywatchCard extends HTMLElement {
     this._startTicker();
   }
 
+  /* Home Assistant does not wrap this one, so a throw here escapes into
+   * whatever is tearing the view down -- and it runs on every dashboard
+   * navigation, not only when the card is removed. Nothing in it is worth
+   * that, and there is no card left to report into either. */
   disconnectedCallback() {
-    this._stopTicker();
-    if (this._map) this._map.destroy();
-    if (this._dialog) this._dialog.close();
+    try {
+      this._stopTicker();
+      if (this._map) this._map.destroy();
+      if (this._dialog) this._dialog.close();
+    } catch (err) {
+      console.error("skywatch-card: could not put the card away cleanly", err);
+    }
   }
 
   _startTicker() {
@@ -1875,8 +1958,7 @@ class SkywatchCard extends HTMLElement {
       try {
         this._refresh(false);
       } catch (err) {
-        console.error("skywatch-card: could not move the aircraft on", err);
-        this._built = false;
+        this._fail(err, "could not move the aircraft on");
       }
     }, 2000);
   }

@@ -267,6 +267,43 @@ test("a card that cannot render is not a configuration error", () => {
   // The state is kept even though the render failed: a failed frame must not
   // also cost the card the newest thing it was given.
   assert.equal(card._hass, hass);
+
+  // And it says so. An empty shadow root looks exactly like Home Assistant's
+  // own grey tile on a normal view -- the frontend writes the message under
+  // that one only in preview -- so a card that fails silently gets reported
+  // as a configuration error, which is the one thing it is not.
+  const html = card.shadowRoot.innerHTML;
+  assert.match(html, /Skywatch could not draw this card/);
+  assert.match(html, /not a configuration error/);
+  // The version is in there because it is the first question asked of any
+  // report, and the reporter is holding a phone with no console.
+  assert.match(html, /v\d+\.\d+\.\d+/);
+  // The thrown message itself, which is the part that says what to fix.
+  assert.match(html, /document is not defined/);
+});
+
+/*
+ * Tearing the previous card down is not the configuration's fault, and
+ * `setConfig` runs again on every dashboard save and every config pushed from
+ * another browser -- so a throw from the teardown would turn an ordinary save
+ * into the grey tile, permanently, on a card whose YAML never changed.
+ */
+test("a card that cannot be torn down is not a configuration error either", () => {
+  const card = new defined["skywatch-card"]();
+  card.setConfig({ type: "custom:skywatch-card", entities: ["sensor.a"] });
+
+  card._map = {
+    destroy() {
+      throw new Error("ResizeObserver went away");
+    },
+  };
+
+  assert.doesNotThrow(() => {
+    card.setConfig({ type: "custom:skywatch-card", entities: ["sensor.b"] });
+  }, "the save that re-pushes the config");
+  // Dropped before it was asked to go, so a second save does not find the
+  // same broken map still attached and throw all over again.
+  assert.equal(card._map, null);
 });
 
 /*
