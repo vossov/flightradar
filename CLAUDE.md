@@ -119,6 +119,24 @@ next update starts over. Anything reached from either — `_build`, `_refresh`,
 `_render`, the map, the popup — is free to be written plainly, because none of
 it can take the card down. Keep it that way; the guard is the whole design.
 
+`setConfig` is on the guard now too, and the first note above is why it was
+not before — but the reason it needed to be is different from the reason it
+looked like it did. Its *preamble* tears the previous card down, and that runs
+on every dashboard save and every config pushed from another browser, on a card
+whose YAML never changed. A throw from `_map.destroy()` there is a permanent
+tile over a save. `disconnectedCallback` is guarded for the same shape, minus
+the tile: Home Assistant does not wrap that one at all, so a throw escapes into
+whatever is tearing the view down.
+
+**A caught failure renders `_fail`, not nothing.** An empty shadow root and the
+grey tile are the same blank rectangle to the user, per the second note above,
+so a card that fails quietly is reported as a configuration error — the one
+thing it is not — and the search starts at the YAML. `_fail` puts the card's
+name, its version and the thrown message in the shadow root, as a plain `div`
+with inline styles: no `ha-card`, no stylesheet, nothing that the thing which
+just failed could also break. It is what a phone has instead of a console. Its
+own throw is caught and logged, and the card goes back to being blank.
+
 ## The card is parsed by old WebViews
 
 It ships unbundled, so what is written is what the browser parses, and the
